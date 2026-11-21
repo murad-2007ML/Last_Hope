@@ -6,7 +6,9 @@ public class RadioSystem : MonoBehaviour
 {
     [SerializeField] float minFreq  = 88.0f;
     [SerializeField] float maxFreq  = 108.0f;
+#pragma warning disable CS0414
     [SerializeField] float scrollStep = 0.1f;
+#pragma warning restore CS0414
     [SerializeField] Text      frequencyDisplay;
     [SerializeField] Transform radioDial;
     [SerializeField] AudioSource staticSource;
@@ -57,12 +59,12 @@ public class RadioSystem : MonoBehaviour
 
     void Start()
     {
-        // Load voice acting audio clips to preserve character dialogues
-        _clipBroken     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_02_broken");
+        // rescuer_02_broken repurposed as Stage4_DoorOverride — no audio at 104.5 broken signal
+        _clipBroken     = null;
         _clipBackup     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_03_wires");
         _clipValveGuide = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_04_valve");
         _clipCodeGuide  = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_05_code");
-        Debug.Log($"[RadioSystem] Rescuer clips — broken:{_clipBroken != null} backup:{_clipBackup != null} valve:{_clipValveGuide != null} code:{_clipCodeGuide != null}");
+        Debug.Log($"[RadioSystem] Rescuer clips — backup:{_clipBackup != null} valve:{_clipValveGuide != null} code:{_clipCodeGuide != null}");
 
         BuildRadioUIIfNeeded();
         UpdateDisplay();
@@ -332,7 +334,7 @@ public class RadioSystem : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
         bool done = false;
         DialogueManager.Instance?.SpeakRescuer(
-            "The magnetic lock is frozen. Check the wall clock — if it stopped before 04:00, open the fuse box and cut the YELLOW wire first, then the BLUE wire. Do NOT touch the red wire!",
+            "I hear you! Magnetic lock's jammed. Check the wall clock and circuit note—cut the fuse wires in exact order!",
             _clipBackup, () => done = true);
         while (!done) yield return null;
         PuzzleManager3D.Instance?.OnRadioStage2Ready();
@@ -342,7 +344,7 @@ public class RadioSystem : MonoBehaviour
     {
         yield return new WaitForSeconds(1.2f);
         DialogueManager.Instance?.SpeakRescuer(
-            "Second lock is jammed by water pressure. I'm banging a wrench on the main pipe from outside — listen closely, find which pipe the sound comes from, and turn its valve!",
+            "First lock's open! Water pressure's jamming the second. Listen for my wrench knocking—find that valve and bleed pressure three times!",
             _clipValveGuide);
     }
 
@@ -350,7 +352,7 @@ public class RadioSystem : MonoBehaviour
     {
         yield return new WaitForSeconds(1.0f);
         DialogueManager.Instance?.SpeakRescuer(
-            "Last lock! Combine the two digits under the sun drawing on the wall with the two digits on the back of the photo floating in the water, and enter the 4-digit code!",
+            "One lock left! Get the four-digit code from the chalk sun and the floating photo. Hurry, water's rising!",
             _clipCodeGuide);
     }
 

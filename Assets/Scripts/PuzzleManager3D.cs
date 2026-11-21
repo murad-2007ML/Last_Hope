@@ -84,8 +84,7 @@ public class PuzzleManager3D : MonoBehaviour
     EndingSequence3D _ending;
 
     // Character voice audio clips
-    AudioClip _muradWake, _muradWater, _muradValve, _muradEnd;
-    AudioClip _rescuerIntro;
+    AudioClip _muradWake, _rescuerIntro, _rescuerDoorOverride;
 
     // Cached UI Buttons
     Button _btnRed;
@@ -157,12 +156,10 @@ public class PuzzleManager3D : MonoBehaviour
 
     void Start()
     {
-        _muradWake    = Resources.Load<AudioClip>("Audio/Murad/murad_01_wake");
-        _muradWater   = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
-        _muradValve   = Resources.Load<AudioClip>("Audio/Murad/murad_03_valve");
-        _muradEnd     = Resources.Load<AudioClip>("Audio/Murad/murad_04_end");
-        _rescuerIntro = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_01_intro");
-        Debug.Log($"[PuzzleManager] Murad clips — wake:{_muradWake != null} water:{_muradWater != null} valve:{_muradValve != null} end:{_muradEnd != null}");
+        _muradWake          = Resources.Load<AudioClip>("Audio/Murad/murad_01_wake");
+        _rescuerIntro       = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_01_intro");
+        _rescuerDoorOverride = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_02_broken");
+        Debug.Log($"[PuzzleManager] Clips — muradWake:{_muradWake != null} rescuerIntro:{_rescuerIntro != null} doorOverride:{_rescuerDoorOverride != null}");
 
         BuildLockLightMaterials();
         AutoFindReferences();
@@ -349,7 +346,7 @@ public class PuzzleManager3D : MonoBehaviour
         {
             bool muradDone = false;
             DialogueManager.Instance?.SpeakMurad(
-                "You're finally awake... My leg is pinned under this concrete, I can't move. Check the radio on the table!",
+                "You're awake... My leg is trapped under this concrete. Turn on your flashlight—check the radio!",
                 _muradWake, () => muradDone = true);
             while (!muradDone) yield return null;
         }
@@ -400,9 +397,7 @@ public class PuzzleManager3D : MonoBehaviour
         }
 
         radioSystem?.OnWiresComplete();
-        DialogueManager.Instance?.SpeakMurad(
-            "I can hear the pipes from here. That knocking sound... listen closely, find which pipe it comes from!",
-            _muradValve);
+        DialogueManager.Instance?.SetSubtitle("LOCK 1 OPEN — Listen for the wrench knocking and find the right valve!");
         SetObjective("Listen for the knocking valve — hold and release E in the GREEN sweet spot (70%-85%)");
     }
 
@@ -769,6 +764,10 @@ public class PuzzleManager3D : MonoBehaviour
 
             UnlockLight(lockLight3, 3, isFinalDoor: true);
 
+            DialogueManager.Instance?.SpeakRescuer(
+                "Code accepted! Hydraulic override active—fifteen seconds till the door opens!",
+                _rescuerDoorOverride);
+
             if (!_doorOpenStarted)
             {
                 _doorOpenStarted = true;
@@ -796,10 +795,6 @@ public class PuzzleManager3D : MonoBehaviour
 
         // Final panic attack during hydraulic grind
         panicSystem?.TriggerPanicNow();
-
-        DialogueManager.Instance?.SpeakMurad(
-            "Go... don't look back. I'll find another way out. I promise.",
-            _muradEnd);
 
         float surgeTimer = 0f;
         float creakTimer = 0f;

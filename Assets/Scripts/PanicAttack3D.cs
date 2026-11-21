@@ -15,6 +15,7 @@ public class PanicAttack3D : MonoBehaviour
 
     Vignette _vignette;
     ChromaticAberration _chroma;
+    AudioClip _panicClip;
     bool _inPanic;
     float _panicTimer;
     float _swayTimer;
@@ -26,6 +27,7 @@ public class PanicAttack3D : MonoBehaviour
         panicIntervalMin = 95f;
         panicIntervalMax = 95f;
         breathFillSpeed = 0.2f;
+        _panicClip = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
         ScheduleNextPanic();
 
         if (urpVolume != null)
@@ -67,7 +69,7 @@ public class PanicAttack3D : MonoBehaviour
         if (breathSlider != null) { breathSlider.value = 0f; breathSlider.gameObject.SetActive(true); }
 
         if (DialogueManager.Instance != null)
-            DialogueManager.Instance.SpeakMurad("Look at me, breathe with me: 1... 2... 3... (Hold [SPACE])");
+            DialogueManager.Instance.SpeakMurad("Look at me! Don't panic. Hold Space and breathe with me... in... and out...", _panicClip);
 
         yield return null;
     }

@@ -381,8 +381,10 @@ MonoBehaviour:
   stage2_Rescuer: {fileID: 8300000, guid: 3b3e8f06ccc6b4861bcaf062233f97af, type: 3}
   stage3_Rescuer: {fileID: 8300000, guid: aad620607e9244ccfb56286121fa10e1, type: 3}
   stage4_Rescuer: {fileID: 8300000, guid: b9407722a0cad4c09858253972f4af85, type: 3}
-  panic_Murad: {fileID: 8300000, guid: e307b8423f04247ee9898bb5a50ac65c, type: 3}
+  panic_Murad: {fileID: 8300000, guid: 3e0a01b4decc240b986bff9e0bc353f5, type: 3}
   ending_Rescuer: {fileID: 8300000, guid: 95fbccc10a4ef41b79c6dd27e47a726b, type: 3}
+  stage4_DoorOverride: {fileID: 8300000, guid: d404ae33e6ea74aff8d1aa9da8b64c4d, type: 3}
+  ending_Player: {fileID: 8300000, guid: e307b8423f04247ee9898bb5a50ac65c, type: 3}
   rescuer_02_broken: {fileID: 8300000, guid: d404ae33e6ea74aff8d1aa9da8b64c4d, type: 3}
   murad_02_water: {fileID: 8300000, guid: 3e0a01b4decc240b986bff9e0bc353f5, type: 3}
   murad_03_valve: {fileID: 8300000, guid: e307b8423f04247ee9898bb5a50ac65c, type: 3}
@@ -391,47 +393,55 @@ MonoBehaviour:
   - id: Intro_Murad
     speaker: 0
     audioClip: {fileID: 8300000, guid: 05785639af7794e899e4c679b6edbcdc, type: 3}
-    exactTranscriptText: You're finally awake... My leg is pinned under this concrete, I can't move. Check the radio on the table!
+    exactTranscriptText: "You're awake... My leg is trapped under this concrete. Turn on your flashlight\u2014check the radio!"
   - id: Stage1_Rescuer
     speaker: 1
     audioClip: {fileID: 8300000, guid: f568d4c3c65b84be2b3945234a58f842, type: 3}
-    exactTranscriptText: Hello?! Can anyone hear me? Signal is dying... Check Note #1 and Note #2, apply the offset, and tune the radio!
+    exactTranscriptText: "Hello?! Can you hear me? Signal's dying! Combine the two maintenance notes for the backup frequency and lock the dial!"
   - id: Stage2_Rescuer
     speaker: 1
     audioClip: {fileID: 8300000, guid: 3b3e8f06ccc6b4861bcaf062233f97af, type: 3}
-    exactTranscriptText: "Good, you found the backup frequency! Now listen: check the fuse box on the wall. Cut the wires in sequence \u2014 check the wall clock and Note #3!"
+    exactTranscriptText: "I hear you! Magnetic lock's jammed. Check the wall clock and circuit note\u2014cut the fuse wires in exact order!"
   - id: Stage3_Rescuer
     speaker: 1
     audioClip: {fileID: 8300000, guid: aad620607e9244ccfb56286121fa10e1, type: 3}
-    exactTranscriptText: "Power is rerouted to the hydraulic lines! Now you need to equalize pipe pressure with the valves. Listen to the acoustic resonance \u2014 release when the gauge is in the green!"
+    exactTranscriptText: "First lock's open! Water pressure's jamming the second. Listen for my wrench knocking\u2014find that valve and bleed pressure three times!"
   - id: Stage4_Rescuer
     speaker: 1
     audioClip: {fileID: 8300000, guid: b9407722a0cad4c09858253972f4af85, type: 3}
-    exactTranscriptText: 'Pressure equalized! The keypad on the blast door is active. Enter the clearance code from the clipboard log: zero seven one five!'
+    exactTranscriptText: "One lock left! Get the four-digit code from the chalk sun and the floating photo. Hurry, water's rising!"
   - id: Panic_Murad
     speaker: 0
+    audioClip: {fileID: 8300000, guid: 3e0a01b4decc240b986bff9e0bc353f5, type: 3}
+    exactTranscriptText: "Look at me! Don't panic. Hold Space and breathe with me... in... and out..."
+  - id: Stage4_DoorOverride
+    speaker: 1
+    audioClip: {fileID: 8300000, guid: d404ae33e6ea74aff8d1aa9da8b64c4d, type: 3}
+    exactTranscriptText: "Code accepted! Hydraulic override active\u2014fifteen seconds till the door opens!"
+  - id: Ending_Player
+    speaker: 2
     audioClip: {fileID: 8300000, guid: e307b8423f04247ee9898bb5a50ac65c, type: 3}
-    exactTranscriptText: 'Look at me, breathe with me: 1... 2... 3... (Hold [SPACE])'
+    exactTranscriptText: 'Wait! What about Murad?! Get him out too!'
   - id: Ending_Rescuer
     speaker: 1
     audioClip: {fileID: 8300000, guid: 95fbccc10a4ef41b79c6dd27e47a726b, type: 3}
-    exactTranscriptText: Hold on, I've got you! You're safe now... breathe.
+    exactTranscriptText: "Calm down, you're safe. Look at the corner... Nobody else was in there."
   - id: rescuer_02_broken
     speaker: 1
     audioClip: {fileID: 8300000, guid: d404ae33e6ea74aff8d1aa9da8b64c4d, type: 3}
-    exactTranscriptText: Signal is breaking up... I'm sending the backup frequency protocol. Listen carefully!
+    exactTranscriptText: "Code accepted! Hydraulic override active\u2014fifteen seconds till the door opens!"
   - id: murad_02_water
     speaker: 0
     audioClip: {fileID: 8300000, guid: 3e0a01b4decc240b986bff9e0bc353f5, type: 3}
-    exactTranscriptText: The water's rising fast! It's already up to our knees! Hurry, please!
+    exactTranscriptText: "Look at me! Don't panic. Hold Space and breathe with me... in... and out..."
   - id: murad_03_valve
-    speaker: 0
+    speaker: 2
     audioClip: {fileID: 8300000, guid: e307b8423f04247ee9898bb5a50ac65c, type: 3}
-    exactTranscriptText: Listen to the pipes... The steam hissing changes when the valve aligns. Don't let it over-pressurize!
+    exactTranscriptText: 'Wait! What about Murad?! Get him out too!'
   - id: murad_04_end
     speaker: 0
     audioClip: {fileID: 8300000, guid: fdb58d70bf74c4cc29950ee76c20d086, type: 3}
-    exactTranscriptText: You did it... The emergency seals are releasing! Get the door open, hurry!
+    exactTranscriptText: (unused)
 --- !u!4 &27671671
 Transform:
   m_ObjectHideFlags: 0

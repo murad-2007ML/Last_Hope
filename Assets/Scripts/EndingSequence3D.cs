@@ -20,6 +20,7 @@ public class EndingSequence3D : MonoBehaviour
 
     bool _triggered;
     AudioClip _clipEnding;
+    AudioClip _clipPlayer;
 
     void Awake()
     {
@@ -54,6 +55,7 @@ public class EndingSequence3D : MonoBehaviour
     void Start()
     {
         _clipEnding = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_06_ending");
+        _clipPlayer = Resources.Load<AudioClip>("Audio/Murad/murad_03_valve");
     }
 
     public void Trigger()
@@ -62,6 +64,36 @@ public class EndingSequence3D : MonoBehaviour
         _triggered = true;
         StartCoroutine(EndingRoutine());
     }
+
+    public void PlayCreditsOnly()
+    {
+        if (_triggered) return;
+        _triggered = true;
+        StartCoroutine(CreditsRoutine());
+    }
+
+    IEnumerator CreditsRoutine()
+    {
+        SetSubtitle("");
+        if (creditsText != null)
+        {
+            creditsText.gameObject.SetActive(true);
+            creditsText.text = GetCreditsText();
+        }
+        yield break;
+    }
+
+    string GetCreditsText() =>
+        "<b>THE LAST HOPE</b>\n\n" +
+        "\"Can You Hear Me?\"\n\n" +
+        "─────────────────────────────────────────\n\n" +
+        "Isolation can make us hear voices we need to hear.\n" +
+        "Trauma can make us see people who protect us — even if they were never there.\n\n" +
+        "If you are struggling alone, please reach out.\n\n" +
+        "<b>Mental Health Support:</b>\n" +
+        "Crisis Text Line: Text HOME to 741741\n" +
+        "International Association for Suicide Prevention: https://www.iasp.info/resources/Crisis_Centres/\n\n" +
+        "You are not alone.";
 
     IEnumerator EndingRoutine()
     {
@@ -77,9 +109,21 @@ public class EndingSequence3D : MonoBehaviour
         // Flood room with warm white light
         yield return StartCoroutine(FlashWhite());
 
-        // Subtitle: "Wait! What about Murad?!"
-        SetSubtitle("Wait! What about Murad?! Get him out too!");
-        yield return new WaitForSeconds(3.5f);
+        // Player voice: "Wait! What about Murad?! Get him out too!"
+        if (DialogueManager.Instance != null)
+        {
+            bool playerDone = false;
+            DialogueManager.Instance.SpeakPlayer(
+                "Wait! What about Murad?! Get him out too!",
+                _clipPlayer,
+                () => playerDone = true);
+            while (!playerDone) yield return null;
+        }
+        else
+        {
+            SetSubtitle("Wait! What about Murad?! Get him out too!");
+            yield return new WaitForSeconds(3.5f);
+        }
 
         // Pan camera toward Main Table
         yield return StartCoroutine(PanCamera());
@@ -93,7 +137,7 @@ public class EndingSequence3D : MonoBehaviour
         if (DialogueManager.Instance != null)
         {
             DialogueManager.Instance.SpeakRescuer(
-                "There was no one else in there with you...",
+                "Calm down, you're safe. Look at the corner... Nobody else was in there.",
                 _clipEnding,
                 null);
         }
@@ -107,17 +151,7 @@ public class EndingSequence3D : MonoBehaviour
         if (creditsText != null)
         {
             creditsText.gameObject.SetActive(true);
-            creditsText.text =
-                "<b>THE LAST HOPE</b>\n\n" +
-                "\"Can You Hear Me?\"\n\n" +
-                "─────────────────────────────────────────\n\n" +
-                "Isolation can make us hear voices we need to hear.\n" +
-                "Trauma can make us see people who protect us — even if they were never there.\n\n" +
-                "If you are struggling alone, please reach out.\n\n" +
-                "<b>Mental Health Support:</b>\n" +
-                "Crisis Text Line: Text HOME to 741741\n" +
-                "International Association for Suicide Prevention: https://www.iasp.info/resources/Crisis_Centres/\n\n" +
-                "You are not alone.";
+            creditsText.text = GetCreditsText();
         }
     }
 

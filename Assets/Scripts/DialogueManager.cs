@@ -8,7 +8,8 @@ using TMPro;
 public enum Speaker
 {
     Murad,
-    Rescuer
+    Rescuer,
+    Player
 }
 
 [System.Serializable]
@@ -55,6 +56,8 @@ public class DialogueManager : MonoBehaviour
     [SerializeField] AudioClip ending_Rescuer;
 
     [Header("Additional Voice Clips")]
+    [SerializeField] AudioClip stage4_DoorOverride;
+    [SerializeField] AudioClip ending_Player;
     [SerializeField] AudioClip rescuer_02_broken;
     [SerializeField] AudioClip murad_02_water;
     [SerializeField] AudioClip murad_03_valve;
@@ -70,13 +73,15 @@ public class DialogueManager : MonoBehaviour
     public bool RescuerSpeaking => _rescuerSpeaking;
     public List<SyncedDialogueEntry> DialogueEntries => dialogueEntries;
 
-    public AudioClip IntroMuradClip       => intro_Murad;
-    public AudioClip Stage1RescuerClip    => stage1_Rescuer;
-    public AudioClip Stage2RescuerClip    => stage2_Rescuer;
-    public AudioClip Stage3RescuerClip    => stage3_Rescuer;
-    public AudioClip Stage4RescuerClip    => stage4_Rescuer;
-    public AudioClip PanicMuradClip       => panic_Murad;
-    public AudioClip EndingRescuerClip    => ending_Rescuer;
+    public AudioClip IntroMuradClip         => intro_Murad;
+    public AudioClip Stage1RescuerClip      => stage1_Rescuer;
+    public AudioClip Stage2RescuerClip      => stage2_Rescuer;
+    public AudioClip Stage3RescuerClip      => stage3_Rescuer;
+    public AudioClip Stage4RescuerClip      => stage4_Rescuer;
+    public AudioClip PanicMuradClip         => panic_Murad;
+    public AudioClip EndingRescuerClip      => ending_Rescuer;
+    public AudioClip Stage4DoorOverrideClip => stage4_DoorOverride;
+    public AudioClip EndingPlayerClip       => ending_Player;
 
     void Awake()
     {
@@ -167,11 +172,13 @@ public class DialogueManager : MonoBehaviour
     {
         if (legacy == null) return null;
         GameObject go = legacy.gameObject;
+        var existing = go.GetComponent<TextMeshProUGUI>();
+        if (existing != null) return existing;
         string t = legacy.text;
         Color c = legacy.color;
         int sz = legacy.fontSize;
         TextAnchor align = legacy.alignment;
-        Destroy(legacy);
+        DestroyImmediate(legacy);
 
         var tmp = go.AddComponent<TextMeshProUGUI>();
         tmp.text = t;
@@ -202,53 +209,45 @@ public class DialogueManager : MonoBehaviour
 
     public void EnsureDefaultDialogueEntries()
     {
-        if (intro_Murad == null)        intro_Murad        = Resources.Load<AudioClip>("Audio/Murad/murad_01_wake");
-        if (stage1_Rescuer == null)     stage1_Rescuer     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_01_intro");
-        if (stage2_Rescuer == null)     stage2_Rescuer     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_03_wires");
-        if (stage3_Rescuer == null)     stage3_Rescuer     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_04_valve");
-        if (stage4_Rescuer == null)     stage4_Rescuer     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_05_code");
-        if (ending_Rescuer == null)     ending_Rescuer     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_06_ending");
-        if (rescuer_02_broken == null)  rescuer_02_broken  = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_02_broken");
-        if (murad_02_water == null)     murad_02_water     = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
-        if (murad_03_valve == null)     murad_03_valve     = Resources.Load<AudioClip>("Audio/Murad/murad_03_valve");
-        if (murad_04_end == null)       murad_04_end       = Resources.Load<AudioClip>("Audio/Murad/murad_04_end");
+        if (intro_Murad == null)          intro_Murad          = Resources.Load<AudioClip>("Audio/Murad/murad_01_wake");
+        if (panic_Murad == null)          panic_Murad          = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
+        if (stage1_Rescuer == null)       stage1_Rescuer       = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_01_intro");
+        if (stage4_DoorOverride == null)  stage4_DoorOverride  = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_02_broken");
+        if (stage2_Rescuer == null)       stage2_Rescuer       = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_03_wires");
+        if (stage3_Rescuer == null)       stage3_Rescuer       = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_04_valve");
+        if (stage4_Rescuer == null)       stage4_Rescuer       = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_05_code");
+        if (ending_Rescuer == null)       ending_Rescuer       = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_06_ending");
+        if (ending_Player == null)        ending_Player        = Resources.Load<AudioClip>("Audio/Murad/murad_03_valve");
+        if (murad_02_water == null)       murad_02_water       = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
+        if (murad_03_valve == null)       murad_03_valve       = Resources.Load<AudioClip>("Audio/Murad/murad_03_valve");
+        if (rescuer_02_broken == null)    rescuer_02_broken    = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_02_broken");
 
         AddOrUpdateEntry("Intro_Murad", Speaker.Murad, intro_Murad,
-            "You're finally awake... My leg is pinned under this concrete, I can't move. Check the radio on the table!");
+            "You're awake... My leg is trapped under this concrete. Turn on your flashlight—check the radio!");
 
         AddOrUpdateEntry("Stage1_Rescuer", Speaker.Rescuer, stage1_Rescuer,
-            "Hello?! Can anyone hear me? Signal is dying... Check Note #1 and Note #2, apply the offset, and tune the radio!");
+            "Hello?! Can you hear me? Signal's dying! Combine the two maintenance notes for the backup frequency and lock the dial!");
 
         AddOrUpdateEntry("Stage2_Rescuer", Speaker.Rescuer, stage2_Rescuer,
-            "Good, you found the backup frequency! Now listen: check the fuse box on the wall. Cut the wires in sequence — check the wall clock and Note #3!");
+            "I hear you! Magnetic lock's jammed. Check the wall clock and circuit note—cut the fuse wires in exact order!");
 
         AddOrUpdateEntry("Stage3_Rescuer", Speaker.Rescuer, stage3_Rescuer,
-            "Power is rerouted to the hydraulic lines! Now you need to equalize pipe pressure with the valves. Listen to the acoustic resonance — release when the gauge is in the green!");
+            "First lock's open! Water pressure's jamming the second. Listen for my wrench knocking—find that valve and bleed pressure three times!");
 
         AddOrUpdateEntry("Stage4_Rescuer", Speaker.Rescuer, stage4_Rescuer,
-            "Pressure equalized! The keypad on the blast door is active. Enter the clearance code from the clipboard log: zero seven one five!");
+            "One lock left! Get the four-digit code from the chalk sun and the floating photo. Hurry, water's rising!");
 
         AddOrUpdateEntry("Panic_Murad", Speaker.Murad, panic_Murad,
-            "Look at me, breathe with me: 1... 2... 3... (Hold [SPACE])");
+            "Look at me! Don't panic. Hold Space and breathe with me... in... and out...");
+
+        AddOrUpdateEntry("Stage4_DoorOverride", Speaker.Rescuer, stage4_DoorOverride,
+            "Code accepted! Hydraulic override active—fifteen seconds till the door opens!");
+
+        AddOrUpdateEntry("Ending_Player", Speaker.Player, ending_Player,
+            "Wait! What about Murad?! Get him out too!");
 
         AddOrUpdateEntry("Ending_Rescuer", Speaker.Rescuer, ending_Rescuer,
-            "Hold on, I've got you! You're safe now... breathe.");
-
-        // Preserved optional/dialogue lines
-        AddOrUpdateEntry("murad_02_water", Speaker.Murad, murad_02_water,
-            "The water's rising fast! It's already up to our knees! Hurry, please!");
-
-        AddOrUpdateEntry("murad_03_valve", Speaker.Murad, murad_03_valve,
-            "Listen to the pipes... The steam hissing changes when the valve aligns. Don't let it over-pressurize!");
-
-        AddOrUpdateEntry("murad_04_end", Speaker.Murad, murad_04_end,
-            "You did it... The emergency seals are releasing! Get the door open, hurry!");
-
-        AddOrUpdateEntry("rescuer_02_broken", Speaker.Rescuer, rescuer_02_broken,
-            "Signal is breaking up... I'm sending the backup frequency protocol. Listen carefully!");
-
-        AddOrUpdateEntry("rescuer_06_ending", Speaker.Rescuer, ending_Rescuer,
-            "Hold on, I've got you! You're safe now... breathe.");
+            "Calm down, you're safe. Look at the corner... Nobody else was in there.");
     }
 
     void AddOrUpdateEntry(string id, Speaker speaker, AudioClip clip, string text)
@@ -261,10 +260,8 @@ public class DialogueManager : MonoBehaviour
         }
         else
         {
-            if (existing.audioClip == null && clip != null)
-                existing.audioClip = clip;
-            if (string.IsNullOrEmpty(existing.exactTranscriptText))
-                existing.exactTranscriptText = text;
+            if (clip != null) existing.audioClip = clip;
+            existing.exactTranscriptText = text;
         }
     }
 
@@ -281,7 +278,12 @@ public class DialogueManager : MonoBehaviour
         if (entry != null)
         {
             _rescuerSpeaking = entry.speaker == Speaker.Rescuer;
-            string prefix = entry.speaker == Speaker.Rescuer ? "<color=#4CFF88>[RESCUER]:</color>  " : "<color=#88CCFF>[MURAD]:</color>  ";
+            string prefix = entry.speaker switch
+            {
+                Speaker.Rescuer => "<color=#4CFF88>[RESCUER]:</color>  ",
+                Speaker.Player  => "<color=#FFE066>[YOU]:</color>  ",
+                _               => "<color=#88CCFF>[MURAD]:</color>  "
+            };
             RunTypewriter(prefix + entry.exactTranscriptText, entry.audioClip, onDone, entry.speaker == Speaker.Rescuer);
         }
         else
@@ -309,11 +311,22 @@ public class DialogueManager : MonoBehaviour
         RunTypewriter(labeled, clip, onDone, isRescuer: false);
     }
 
+    public void SpeakPlayer(string text, AudioClip clip = null, Action onDone = null)
+    {
+        _rescuerSpeaking = false;
+        if (clip == null)
+            clip = FindClipForText(text, Speaker.Player);
+        string labeled = $"<color=#FFE066>[YOU]:</color>  {text}";
+        RunTypewriter(labeled, clip, onDone, isRescuer: false);
+    }
+
     AudioClip FindClipForText(string text, Speaker speaker)
     {
+        if (string.IsNullOrEmpty(text)) return null;
         foreach (var entry in dialogueEntries)
         {
-            if (entry.speaker == speaker && entry.audioClip != null)
+            if (entry.speaker == speaker && entry.audioClip != null &&
+                !string.IsNullOrEmpty(entry.exactTranscriptText))
             {
                 if (text.IndexOf(entry.exactTranscriptText, StringComparison.OrdinalIgnoreCase) >= 0 ||
                     entry.exactTranscriptText.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
