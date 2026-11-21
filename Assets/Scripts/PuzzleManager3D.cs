@@ -41,7 +41,6 @@ public class PuzzleManager3D : MonoBehaviour
     [Header("Pressure Valve")]
     [SerializeField] GameObject  pressureValve;
     [SerializeField] AudioSource valveAudioSource;
-    [SerializeField] float       valveHoldRequired = 6f; // 6.0 seconds across 3 notches
     [SerializeField] GameObject  valveHoldUI;
     [SerializeField] Slider      valveProgressSlider;
     [SerializeField] Text        valveProgressText;
@@ -63,19 +62,25 @@ public class PuzzleManager3D : MonoBehaviour
     [SerializeField] UnityEvent onExitDoorOpened;
     [SerializeField] bool triggerEndingCutsceneAutomatically = false;
 
-    // Runtime state
-    int   _wireCutStep;
-    bool  _valveHolding;
-    float _valveHoldTimer;
-    float _notchFloorTimer;
-    bool  _valveDone;
-    bool  _stage3PanicTriggered;
+    // Runtime state - Wires
+    int _wireCutStep;
+
+    // Runtime state - Valves
+    GameObject[] _valves;
+    int _activeValveIndex;
+    bool _valveHolding;
+    bool _holdingCorrectValve;
+    float _gaugeProgress;
+    int _valveNotchesDone;
+    bool _valveDone;
+
+    // Runtime state - Keypad & Door
     string _keypadInput = "";
     const string CODE = "0715";
+    bool _doorOpenStarted;
 
     Material _matRed, _matGreen;
     EndingSequence3D _ending;
-    bool _doorOpenStarted;
 
     // Character voice audio clips
     AudioClip _muradWake, _muradWater, _muradValve, _muradEnd;
@@ -105,17 +110,8 @@ public class PuzzleManager3D : MonoBehaviour
 
         BuildLockLightMaterials();
         AutoFindReferences();
-
-        if (valveAudioSource != null)
-        {
-            valveAudioSource.clip         = ProceduralAudio.GenerateClangClip();
-            valveAudioSource.loop         = true;
-            valveAudioSource.spatialBlend = 1f;
-            valveAudioSource.minDistance  = 0.5f;
-            valveAudioSource.maxDistance  = 8f;
-            valveAudioSource.playOnAwake  = false;
-            valveAudioSource.Stop(); // Silent until Stage 3 starts!
-        }
+        SetupValves();
+        SetupSweetSpotIndicator();
 
         SetObjective("Explore the basement — turn on your flashlight [LEFT CLICK]");
     }
@@ -148,6 +144,73 @@ public class PuzzleManager3D : MonoBehaviour
         }
     }
 
+    void SetupValves()
+    {
+        if (pressureValve == null) return;
+
+        _valves = new GameObject[3];
+        _valves[0] = pressureValve;
+
+        var v2 = GameObject.Find("Pressure_Valve_2");
+        if (v2 == null)
+        {
+            v2 = Instantiate(pressureValve, pressureValve.transform.position + new Vector3(0f, 0f, -2.3f), pressureValve.transform.rotation);
+            v2.name = "Pressure_Valve_2";
+        }
+        _valves[1] = v2;
+
+        var v3 = GameObject.Find("Pressure_Valve_3");
+        if (v3 == null)
+        {
+            v3 = Instantiate(pressureValve, pressureValve.transform.position + new Vector3(0f, 0f, 2.3f), pressureValve.transform.rotation);
+            v3.name = "Pressure_Valve_3";
+        }
+        _valves[2] = v3;
+
+        _activeValveIndex = Random.Range(0, 3);
+
+        for (int i = 0; i < 3; i++)
+        {
+            var v = _valves[i];
+            if (v == null) continue;
+
+            if (v.GetComponent<Collider>() == null)
+            {
+                var col = v.AddComponent<SphereCollider>();
+                col.radius = 0.35f;
+            }
+
+            var src = v.GetComponent<AudioSource>();
+            if (src == null) src = v.AddComponent<AudioSource>();
+            src.clip = ProceduralAudio.GenerateClangClip();
+            src.loop = true;
+            src.spatialBlend = 1f;
+            src.minDistance = 0.5f;
+            src.maxDistance = 7f;
+            src.playOnAwake = false;
+            src.Stop();
+        }
+    }
+
+    void SetupSweetSpotIndicator()
+    {
+        if (valveProgressSlider == null) return;
+        Transform existing = valveProgressSlider.transform.Find("SweetSpotZone");
+        if (existing != null) return;
+
+        var zoneGO = new GameObject("SweetSpotZone", typeof(RectTransform), typeof(Image));
+        zoneGO.transform.SetParent(valveProgressSlider.transform, false);
+        var rt = zoneGO.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.70f, 0f);
+        rt.anchorMax = new Vector2(0.85f, 1f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var img = zoneGO.GetComponent<Image>();
+        img.color = new Color(0.2f, 0.95f, 0.35f, 0.55f);
+        img.raycastTarget = false;
+    }
+
     // ── Silent Gating Checker for PlayerInteraction ──────────────────────────
 
     public bool IsInteractableAllowed(string nameLower)
@@ -155,22 +218,23 @@ public class PuzzleManager3D : MonoBehaviour
         switch (CurrentStage)
         {
             case PuzzleStage.Stage0_Locked:
-                // Pre-start: nothing is interactable until flashlight is turned on
+                // Pre-start: Radio is allowed to initiate Stage 1
+                if (nameLower.Contains("vintage_radio") || nameLower.Contains("radio")) return true;
                 return false;
 
             case PuzzleStage.Stage1_TuneBackupFrequency:
                 // Vintage_Radio: Active from Stage1 onward.
-                // Clue_Paper_1 (98.4 FM): Active in Stage1+.
+                // Clue_Paper_1 (Base freq 102.0) & Clue_Paper_2 (Offset -3.6): Active in Stage1+.
                 if (nameLower.Contains("vintage_radio") || nameLower.Contains("radio")) return true;
-                if (nameLower.Contains("clue_paper_1")) return true;
+                if (nameLower.Contains("clue_paper_1")  || nameLower.Contains("clue_paper_2")) return true;
                 return false;
 
             case PuzzleStage.Stage2_CutWires:
                 // Vintage_Radio active from Stage1 onward
                 if (nameLower.Contains("vintage_radio") || nameLower.Contains("radio")) return true;
-                if (nameLower.Contains("clue_paper_1")) return true;
-                if (nameLower.Contains("clue_paper_2")) return true;
-                // Fuse_Box & Wall_Clock: Active ONLY in Stage2
+                if (nameLower.Contains("clue_paper_1")  || nameLower.Contains("clue_paper_2")) return true;
+                if (nameLower.Contains("clue_paper_3")) return true;
+                // Fuse_Box & Wall_Clock: Active in Stage2
                 if (nameLower.Contains("fuse_box") || nameLower.Contains("fuse")) return true;
                 if (nameLower.Contains("wall_clock") || nameLower.Contains("clock")) return true;
                 return false;
@@ -178,18 +242,19 @@ public class PuzzleManager3D : MonoBehaviour
             case PuzzleStage.Stage3_TurnPipeValve:
                 // Vintage_Radio active from Stage1 onward
                 if (nameLower.Contains("vintage_radio") || nameLower.Contains("radio")) return true;
-                // Pressure_Valve: Active ONLY in Stage3
+                // Pressure_Valves: Active in Stage3
                 if (nameLower.Contains("pressure_valve") || nameLower.Contains("valve")) return true;
                 return false;
 
             case PuzzleStage.Stage4_EnterDoorCode:
                 // Vintage_Radio active from Stage1 onward
                 if (nameLower.Contains("vintage_radio") || nameLower.Contains("radio")) return true;
-                // Door_Keypad, Chalk_Sun_Board, & Floating_Photo: Active ONLY in Stage4
+                // Door_Keypad, Chalk_Sun_Board, & Floating_Photo: Active in Stage4
                 if (nameLower.Contains("door_keypad") || nameLower.Contains("keypad")) return true;
                 if (nameLower.Contains("chalk_sun_board") || nameLower.Contains("sun")) return true;
                 if (nameLower.Contains("floating_photo") || nameLower.Contains("photo")) return true;
-                if (nameLower.Contains("clue_paper_3")) return true;
+                if (nameLower.Contains("wall_clock") || nameLower.Contains("clock")) return true;
+                if (nameLower.Contains("clue_paper_1") || nameLower.Contains("clue_paper_2") || nameLower.Contains("clue_paper_3")) return true;
                 return false;
 
             case PuzzleStage.Stage5_DoorUnlocked:
@@ -205,11 +270,10 @@ public class PuzzleManager3D : MonoBehaviour
 
     public void OnFirstFlashlightOn()
     {
-        // Immediately transition to Stage 1 so radio is interactable at once!
         if (CurrentStage == PuzzleStage.Stage0_Locked)
         {
             CurrentStage = PuzzleStage.Stage1_TuneBackupFrequency;
-            SetObjective("Find the note on the desk — tune radio to 98.4 FM");
+            SetObjective("Find Note #1 & Note #2 on desks — calculate frequency and tune radio");
         }
 
         StartCoroutine(OpeningSequence());
@@ -232,12 +296,12 @@ public class PuzzleManager3D : MonoBehaviour
 
         done = false;
         DialogueManager.Instance?.SpeakRescuer(
-            "Hello?! Can anyone hear me? Signal is dying... Check the Sector B note on the far desk and tune the radio to 98.4 FM!",
+            "Hello?! Can anyone hear me? Signal is dying... Check Note #1 and Note #2, apply the offset, and tune the radio!",
             _rescuerIntro, () => done = true);
         while (!done) yield return null;
 
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetStaticAmount(0f);
-        SetObjective("Find the note on the desk — tune radio to 98.4 FM");
+        SetObjective("Find Note #1 & Note #2 — calculate offset and tune radio (Counter signal drift!)");
     }
 
     // ── Stage transitions ─────────────────────────────────────────────────────
@@ -246,7 +310,7 @@ public class PuzzleManager3D : MonoBehaviour
     {
         if (CurrentStage >= PuzzleStage.Stage2_CutWires) return;
         CurrentStage = PuzzleStage.Stage2_CutWires;
-        SetObjective("Check the wall clock — open fuse box and cut YELLOW then BLUE");
+        SetObjective("Check the wall clock and Note #3 — discharge fuse box wires in exact order");
     }
 
     void CompleteWireStage()
@@ -255,33 +319,52 @@ public class PuzzleManager3D : MonoBehaviour
         UnlockLight(lockLight1, 1);
         CloseFuseBox();
 
-        // Start 3D pipe clanking sound when Stage 3 begins
-        if (valveAudioSource != null && !valveAudioSource.isPlaying)
-            valveAudioSource.Play();
+        // Start 3D pipe knocking sound ONLY on the active valve!
+        if (_valves != null)
+        {
+            for (int i = 0; i < _valves.Length; i++)
+            {
+                if (_valves[i] == null) continue;
+                var src = _valves[i].GetComponent<AudioSource>();
+                if (src != null)
+                {
+                    if (i == _activeValveIndex) src.Play();
+                    else src.Stop();
+                }
+            }
+        }
 
         radioSystem?.OnWiresComplete();
         DialogueManager.Instance?.SpeakMurad(
-            "I can hear the pipes from here. That sound... it's coming from behind the wall.",
+            "I can hear the pipes from here. That knocking sound... listen closely, find which pipe it comes from!",
             _muradValve);
-        SetObjective("Locate the clanging pipe and turn its valve (Hold E)");
+        SetObjective("Listen for the knocking valve — hold and release E in the GREEN sweet spot (70%-85%)");
     }
 
     void CompleteValveStage()
     {
-        _valveDone  = true;
+        _valveDone   = true;
+        _valveHolding = false;
+        _holdingCorrectValve = false;
+        if (valveHoldUI != null) valveHoldUI.SetActive(false);
+
         CurrentStage = PuzzleStage.Stage4_EnterDoorCode;
         UnlockLight(lockLight2, 2);
 
-        // Stop 3D pipe clanking sound
-        if (valveAudioSource != null && valveAudioSource.isPlaying)
-            valveAudioSource.Stop();
+        // Stop all valve knocking sounds
+        if (_valves != null)
+        {
+            foreach (var v in _valves)
+            {
+                if (v != null) v.GetComponent<AudioSource>()?.Stop();
+            }
+        }
 
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlaySteamRelease();
 
         radioSystem?.OnValveComplete();
-        panicSystem?.TriggerPanicNow();
-        SetObjective("Combine the clues (sun board & photo) — enter code on keypad");
+        SetObjective("Combine the clues (sun board & photo) — deduce the 4-digit code and enter on keypad");
     }
 
     // ── Lock lights ───────────────────────────────────────────────────────────
@@ -327,7 +410,7 @@ public class PuzzleManager3D : MonoBehaviour
         {
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayHeavyDoorUnlock();
-            DialogueManager.Instance?.SetSubtitle("LOCK 3 RELEASED — DOOR UNLOCKED");
+            DialogueManager.Instance?.SetSubtitle("LOCK 3 RELEASED — HYDRAULIC DOOR OVERRIDE ENGAGED");
         }
         else
         {
@@ -337,36 +420,36 @@ public class PuzzleManager3D : MonoBehaviour
         }
     }
 
-    // ── Clue inspection ───────────────────────────────────────────────────────
+    // ── Clue inspection (Upgraded Riddles & Deduction) ─────────────────────────
 
     public void InspectChalkBoard()
     {
-        if (CurrentStage != PuzzleStage.Stage4_EnterDoorCode) return;
-        ShowClue("Scratched onto the board in chalk:\n\n[ 07 ]\n\nA child's handwriting. Yours.\n\"The sun has two rays.\"");
+        if (CurrentStage < PuzzleStage.Stage4_EnterDoorCode) return;
+        ShowClue("Scratched into the wall under the chalk sun drawing:\n\n\"Days above ground: 04\nDays trapped below: 03\n— Sum: [First Pair] —\"\n\n(04 + 03 = 07)");
     }
 
     public void InspectClock()
     {
-        if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
-        ShowClue("The clock stopped.\n\n03 : 15\n\n\"Before 04:00 — cut YELLOW, then BLUE. Never Red.\"");
+        if (CurrentStage < PuzzleStage.Stage2_CutWires) return;
+        ShowClue("The clock stopped.\n\n03 : 15\n\n(Hour hand is at 3 — an ODD number.\nMinute hand is stopped at 15.)");
     }
 
     public void InspectPhoto()
     {
-        if (CurrentStage != PuzzleStage.Stage4_EnterDoorCode) return;
-        ShowClue("[You flip the photo over]\n\nFaded ink on the back:\n\n\" — 15 — \"\n\n\"Combine with the sun board.\"");
+        if (CurrentStage < PuzzleStage.Stage4_EnterDoorCode) return;
+        ShowClue("[You inspect the waterlogged photo floating on the surface]\n\nFaded ink on the back:\n\n\"03 / ?? — Look at the stopped clock's minute hand for the day we were trapped.\"\n\n(Minute hand is at 15)");
     }
 
     public void InspectClue(int i)
     {
         if (i == 0 && CurrentStage < PuzzleStage.Stage1_TuneBackupFrequency) return;
-        if (i == 1 && CurrentStage < PuzzleStage.Stage2_CutWires) return;
-        if (i > 1 && CurrentStage < PuzzleStage.Stage4_EnterDoorCode) return;
+        if (i == 1 && CurrentStage < PuzzleStage.Stage1_TuneBackupFrequency) return;
+        if (i == 2 && CurrentStage < PuzzleStage.Stage2_CutWires) return;
 
         string[] notes = {
-            "Sector B Emergency Protocol\n\nBACKUP FREQUENCY:  98.4 FM\n\n\"If primary signal lost, retune immediately.\"",
-            "Maintenance Circuit Diagram:\n\n\"Lock 1 bypass requires Yellow wire then Blue wire.\nRed wire triggers emergency high-voltage surge.\"",
-            "Child's drawing — a sun with numbers along each ray:\n\n  0  —  7  —  1  —  5\n\n(rays point clockwise)"
+            "EMERGENCY RELAY LOG:\n\nBase Frequency = 102.0 MHz.\n\nApply the Sector B Receiver Offset written on Note #2.",
+            "SECTOR B MAINTENANCE NOTE:\n\nReceiver Drift Offset = -3.6 MHz.\n\n(Target Relay Frequency = Base Frequency + Offset)",
+            "MAG-LOCK BYPASS PROTOCOL:\n\nCheck wall clock.\nIf the hour is ODD, discharge in sequence:\n1. YELLOW (Ground)\n2. BLUE (Capacitor)\n3. RED (Mag-Lock Release)\n\nWARNING: Cutting RED before discharging Yellow & Blue causes an arc surge!"
         };
         if (i >= 0 && i < notes.Length) ShowClue(notes[i]);
     }
@@ -384,13 +467,11 @@ public class PuzzleManager3D : MonoBehaviour
         if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = true;
     }
 
-    // ── Fuse Box ──────────────────────────────────────────────────────────────
+    // ── Fuse Box (Stage 2: 3-Wire Discharge Yellow -> Blue -> Red) ───────────
 
     public void OpenFuseBox()
     {
-        // Silent gating
-        if (CurrentStage != PuzzleStage.Stage2_CutWires)
-            return;
+        if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
 
         if (fusePanelUI != null) fusePanelUI.SetActive(true);
         if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = false;
@@ -413,18 +494,26 @@ public class PuzzleManager3D : MonoBehaviour
             case "yellow" when _wireCutStep == 0:
                 if (wireYellow != null) wireYellow.SetActive(false);
                 _wireCutStep = 1;
-                SetStatus("Yellow wire cut. Now cut BLUE.");
+                SetStatus("Yellow (Ground) cut. Next: cut BLUE (Capacitor).");
                 RefreshFuseButtonVisibility();
                 break;
 
             case "blue" when _wireCutStep == 1:
                 if (wireBlue != null) wireBlue.SetActive(false);
+                _wireCutStep = 2;
+                SetStatus("Blue (Capacitor) cut. Next: cut RED (Mag-Lock Release).");
+                RefreshFuseButtonVisibility();
+                break;
+
+            case "red" when _wireCutStep == 2:
+                if (wireRed != null) wireRed.SetActive(false);
+                _wireCutStep = 3;
                 CompleteWireStage();
                 break;
 
             default:
-                SetStatus("WRONG ORDER! High voltage surge. Wires reset.");
-                if (waterController != null) waterController.AddSpeedPercent(5f);
+                SetStatus("ARC SURGE! Wires cut in wrong order! Water surged +4%.");
+                if (waterController != null) waterController.AddWaterSurge(0.04f);
                 ResetWires();
                 break;
         }
@@ -452,11 +541,27 @@ public class PuzzleManager3D : MonoBehaviour
         if (t != null) t.gameObject.SetActive(visible);
     }
 
-    // ── Pressure Valve (6.0s Hold across 3 notches) ──────────────────────────
+    // ── Stage 3: 3-Valve Acoustic Triangulation & Sweet Spot Timing ──────────
 
-    public void BeginValveHold()
+    public void BeginValveHold(Transform valveTransform)
     {
         if (CurrentStage != PuzzleStage.Stage3_TurnPipeValve || _valveDone) return;
+
+        GameObject activeValve = (_valves != null && _activeValveIndex < _valves.Length) ? _valves[_activeValveIndex] : pressureValve;
+        bool isCorrect = (valveTransform != null && activeValve != null &&
+                         (valveTransform == activeValve.transform || valveTransform.IsChildOf(activeValve.transform)));
+
+        if (!isCorrect)
+        {
+            // Wrong silent valve turned! Steam blast + panic attack + water surge penalty
+            if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlaySteamRelease();
+            panicSystem?.TriggerPanicNow();
+            if (waterController != null) waterController.AddWaterSurge(0.04f);
+            SetStatus("WRONG VALVE! High pressure steam burst! Water surged +4%.");
+            return;
+        }
+
+        _holdingCorrectValve = true;
         _valveHolding = true;
         if (valveHoldUI != null) valveHoldUI.SetActive(true);
     }
@@ -464,21 +569,49 @@ public class PuzzleManager3D : MonoBehaviour
     public void EndValveHold()
     {
         if (_valveDone) return;
+
+        if (_valveHolding && _holdingCorrectValve)
+        {
+            if (_gaugeProgress >= 0.70f && _gaugeProgress <= 0.85f)
+            {
+                // Sweet Spot success!
+                _valveNotchesDone++;
+                if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayLatchUnlock();
+
+                if (_valveNotchesDone == 1)
+                {
+                    SetStatus("NOTCH 1/3 RELEASED & LOCKED! Release next pressure notch.");
+                    _gaugeProgress = 0f;
+                }
+                else if (_valveNotchesDone == 2)
+                {
+                    SetStatus("NOTCH 2/3 LOCKED! PANIC ATTACK — Steady breath before final release!");
+                    panicSystem?.TriggerPanicNow();
+                    DialogueManager.Instance?.SpeakMurad("Hold on, steady your breath before the final valve release!");
+                    _gaugeProgress = 0f;
+                }
+                else if (_valveNotchesDone >= 3)
+                {
+                    CompleteValveStage();
+                }
+            }
+            else if (_gaugeProgress < 0.70f && _gaugeProgress > 0.05f)
+            {
+                SetStatus("RELEASED TOO EARLY (<70%)! Must release in GREEN zone (70% - 85%).");
+                _gaugeProgress = 0f;
+            }
+        }
+
         _valveHolding = false;
-        // Drop back to last reached notch
-        _valveHoldTimer = _notchFloorTimer;
-        float progress = Mathf.Clamp01(_valveHoldTimer / valveHoldRequired);
-        if (valveProgressSlider != null) valveProgressSlider.value = progress;
+        _holdingCorrectValve = false;
         if (valveHoldUI != null) valveHoldUI.SetActive(false);
     }
 
-    // ── Keypad ────────────────────────────────────────────────────────────────
+    // ── Keypad (Stage 4) ──────────────────────────────────────────────────────
 
     public void OpenKeypad()
     {
-        // Silent gating
-        if (CurrentStage != PuzzleStage.Stage4_EnterDoorCode)
-            return;
+        if (CurrentStage != PuzzleStage.Stage4_EnterDoorCode) return;
 
         if (keypadPanelUI != null) keypadPanelUI.SetActive(true);
         _keypadInput = "";
@@ -507,33 +640,26 @@ public class PuzzleManager3D : MonoBehaviour
         if (_keypadInput == CODE)
         {
             CurrentStage = PuzzleStage.Stage5_DoorUnlocked;
-            SetStatus("ACCESS GRANTED");
+            SetStatus("ACCESS GRANTED — 15-SECOND HYDRAULIC OVERRIDE INITIATED");
 
-            // 1. Close the keypad UI and re-lock the cursor
             if (keypadPanelUI != null) keypadPanelUI.SetActive(false);
             if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = true;
 
-            // 2. Turn LockLight_3 Green and play heavy door-unlock sound
             UnlockLight(lockLight3, 3, isFinalDoor: true);
 
-            // 3. Smoothly rotate Exit_Door open around its hinge (90 degrees over 2.5s) via coroutine
-            // 4. Invokes onExitDoorOpened and checks triggerEndingCutsceneAutomatically
             if (!_doorOpenStarted)
             {
                 _doorOpenStarted = true;
                 StartCoroutine(OpenExitDoorRoutine());
             }
 
-            DialogueManager.Instance?.SpeakMurad(
-                "Go... don't look back. I'll find another way out. I promise.",
-                _muradEnd);
-
-            SetObjective("The exit door is unlocked — escape the basement");
+            SetObjective("HYDRAULIC OVERRIDE IN PROGRESS — SURVIVE 15 SECONDS!");
         }
         else
         {
-            SetStatus("ACCESS DENIED");
-            if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayKeypadBeep();
+            SetStatus("ACCESS DENIED! Invalid cipher. Water surged +3%.");
+            if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayBuzzer();
+            if (waterController != null) waterController.AddWaterSurge(0.03f);
             _keypadInput = "";
             RefreshKeypadDisplay();
         }
@@ -541,26 +667,50 @@ public class PuzzleManager3D : MonoBehaviour
 
     IEnumerator OpenExitDoorRoutine()
     {
-        if (ProceduralAudio.Instance != null)
-            ProceduralAudio.Instance.PlayDoorCreak();
+        float elapsed = 0f;
+        float duration = 15.0f; // 15-second Hydraulic Door Override
+        Quaternion start = (exitDoor != null) ? exitDoor.localRotation : Quaternion.identity;
+        Quaternion end = start * Quaternion.Euler(0f, -90f, 0f);
 
-        if (exitDoor != null)
+        // Final panic attack during hydraulic grind
+        panicSystem?.TriggerPanicNow();
+
+        DialogueManager.Instance?.SpeakMurad(
+            "Go... don't look back. I'll find another way out. I promise.",
+            _muradEnd);
+
+        float surgeTimer = 0f;
+        float creakTimer = 0f;
+
+        while (elapsed < duration)
         {
-            float elapsed = 0f;
-            float duration = 2.5f; // 90 degrees over 2.5 seconds
-            Quaternion start = exitDoor.localRotation;
-            Quaternion end = start * Quaternion.Euler(0f, -90f, 0f);
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float smooth = Mathf.SmoothStep(0f, 1f, t);
 
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-                float smooth = Mathf.SmoothStep(0f, 1f, t);
+            if (exitDoor != null)
                 exitDoor.localRotation = Quaternion.Slerp(start, end, smooth);
-                yield return null;
+
+            // Grinding / creaking audio
+            creakTimer += Time.deltaTime;
+            if (creakTimer >= 2.5f)
+            {
+                creakTimer = 0f;
+                ProceduralAudio.Instance?.PlayDoorCreak();
             }
-            exitDoor.localRotation = end;
+
+            // Rapid water surging during override
+            surgeTimer += Time.deltaTime;
+            if (surgeTimer >= 3.5f)
+            {
+                surgeTimer = 0f;
+                waterController?.AddWaterSurge(0.02f);
+            }
+
+            yield return null;
         }
+
+        if (exitDoor != null) exitDoor.localRotation = end;
 
         onExitDoorOpened?.Invoke();
 
@@ -585,43 +735,41 @@ public class PuzzleManager3D : MonoBehaviour
 
     void Update()
     {
-        if (!_valveHolding || _valveDone || CurrentStage != PuzzleStage.Stage3_TurnPipeValve) return;
+        if (!_valveHolding || !_holdingCorrectValve || CurrentStage != PuzzleStage.Stage3_TurnPipeValve) return;
 
-        _valveHoldTimer += Time.deltaTime;
-        float progress = Mathf.Clamp01(_valveHoldTimer / valveHoldRequired);
+        _gaugeProgress += Time.deltaTime * 0.32f; // ~3.1 seconds to fill from 0 to 1
 
-        // Update notch floor (100% -> 66% -> 33% -> 0%)
-        if (progress >= 0.666f)
-            _notchFloorTimer = valveHoldRequired * 0.666f;
-        else if (progress >= 0.333f)
-            _notchFloorTimer = valveHoldRequired * 0.333f;
+        if (valveProgressSlider != null)
+            valveProgressSlider.value = Mathf.Clamp01(_gaugeProgress);
 
-        // At 50% progress (3.0s), trigger claustrophobic Panic Attack
-        if (progress >= 0.5f && !_stage3PanicTriggered)
+        int pct = Mathf.RoundToInt(_gaugeProgress * 100f);
+
+        if (_gaugeProgress > 0.85f)
         {
-            _stage3PanicTriggered = true;
-            panicSystem?.TriggerPanicNow();
+            // Pressure overload (>85%)! Vented
+            if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlaySteamRelease();
+            _gaugeProgress = 0f;
+            SetStatus("PRESSURE OVERLOAD (>85%)! Pressure vented. Try notch again.");
+            if (valveProgressText != null)
+                valveProgressText.text = "<color=#FF4444>OVERLOAD (>85%)! VENTED</color>";
+        }
+        else if (_gaugeProgress >= 0.70f)
+        {
+            if (valveProgressText != null)
+                valveProgressText.text = $"<color=#4CFF88>SWEET SPOT ({pct}%) — RELEASE [E] NOW! [NOTCH {_valveNotchesDone + 1}/3]</color>";
+        }
+        else
+        {
+            if (valveProgressText != null)
+                valveProgressText.text = $"GAUGE: {pct}% [HOLD E — RELEASE IN GREEN ZONE (70%-85%)]";
         }
 
-        int pressurePct = Mathf.RoundToInt((1f - progress) * 100f);
-        int notch = progress < 0.333f ? 1 : (progress < 0.666f ? 2 : 3);
-
-        if (valveProgressSlider != null) valveProgressSlider.value = progress;
-        if (valveProgressText   != null)
-            valveProgressText.text = $"RELEASING PRESSURE... {pressurePct}%  [NOTCH {notch}/3]";
-
-        // Rotate valve wheel visually
-        if (pressureValve != null)
+        // Rotate active valve wheel visually
+        GameObject activeValve = (_valves != null && _activeValveIndex < _valves.Length) ? _valves[_activeValveIndex] : pressureValve;
+        if (activeValve != null)
         {
-            var wheel = FindChild(pressureValve.transform, "Valve_Wheel");
+            var wheel = FindChild(activeValve.transform, "Valve_Wheel");
             if (wheel != null) wheel.Rotate(Vector3.forward, 90f * Time.deltaTime);
-        }
-
-        if (_valveHoldTimer >= valveHoldRequired)
-        {
-            _valveHolding = false;
-            if (valveHoldUI != null) valveHoldUI.SetActive(false);
-            CompleteValveStage();
         }
     }
 

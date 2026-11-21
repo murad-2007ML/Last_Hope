@@ -81,9 +81,21 @@ public class Flashlight3D : MonoBehaviour
         // Only toggle when no inspect panel is open
         bool anyPanelOpen = PuzzleManager3D.Instance != null && PuzzleManager3D.Instance.AnyPanelOpen;
 
-        // Support Left-Click (as requested) as well as Right-Click and F key
-        if ((Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F)) && !anyPanelOpen)
-            Toggle();
+        if (!anyPanelOpen)
+        {
+            if (!_on)
+            {
+                // Initial turn on with Left-Click, Right-Click, or F
+                if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F))
+                    Toggle();
+            }
+            else
+            {
+                // Toggle with Right-Click or F (leaving Left-Click for UI/interaction)
+                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F))
+                    Toggle();
+            }
+        }
 
         UpdateLight();
         UpdateSway();
@@ -103,7 +115,10 @@ public class Flashlight3D : MonoBehaviour
         {
             _firstOnFired = true;
             ShowPrompt(false);
-            PuzzleManager3D.Instance?.OnFirstFlashlightOn();
+            if (PuzzleManager3D.Instance != null)
+                PuzzleManager3D.Instance.OnFirstFlashlightOn();
+            else
+                FindFirstObjectByType<PuzzleManager3D>()?.OnFirstFlashlightOn();
         }
     }
 

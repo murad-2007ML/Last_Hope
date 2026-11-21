@@ -15,7 +15,7 @@ public class RadioSystem : MonoBehaviour
     const float FREQ_BROKEN  = 104.5f;
     const float FREQ_BACKUP  = 98.4f;
     const float TUNE_THRESH  = 0.25f;
-    const float LOCK_TIME_REQUIRED = 2.5f;
+    const float LOCK_TIME_REQUIRED = 4.0f;
 
     float _freq = 92.0f;
     bool  _panelOpen;
@@ -67,11 +67,11 @@ public class RadioSystem : MonoBehaviour
 
     public void OpenPanel()
     {
-        // Silent gating: only open if Stage 1 or later has started
+        // Stage Transition Guarantee: If still in Stage 0, transition to Stage 1 now so radio interaction is guaranteed
         if (PuzzleManager3D.Instance != null &&
-            PuzzleManager3D.Instance.CurrentStage < PuzzleStage.Stage1_TuneBackupFrequency)
+            PuzzleManager3D.Instance.CurrentStage == PuzzleStage.Stage0_Locked)
         {
-            return;
+            PuzzleManager3D.Instance.OnFirstFlashlightOn();
         }
 
         _panelOpen = true;
@@ -195,8 +195,8 @@ public class RadioSystem : MonoBehaviour
                     ProceduralAudio.Instance.PlaySignalLockChime();
             }
 
-            // Subtle atmospheric interference drift
-            float drift = Mathf.Sin(Time.time * 7f) * 0.12f * Time.deltaTime;
+            // Active atmospheric interference drift trying to pull away
+            float drift = Mathf.Sin(Time.time * 3.5f) * 0.32f * Time.deltaTime;
             _freq = Mathf.Clamp(_freq + drift, minFreq, maxFreq);
             UpdateDial();
             UpdateDisplay();
@@ -206,7 +206,7 @@ public class RadioSystem : MonoBehaviour
             float pct = Mathf.Clamp01(_lockTimer / LOCK_TIME_REQUIRED);
 
             if (_lockStatusText != null)
-                _lockStatusText.text = $"<color=#FFE066>SIGNAL LOCKING...</color>  {Mathf.RoundToInt(pct * 100f)}%  (KEEP STEADY)";
+                _lockStatusText.text = $"<color=#FFE066>SIGNAL LOCKING...</color>  {Mathf.RoundToInt(pct * 100f)}%  (COUNTER DRIFT!)";
             if (_lockSlider != null)
                 _lockSlider.value = pct;
 
@@ -232,13 +232,24 @@ public class RadioSystem : MonoBehaviour
         }
         else
         {
-            // Reset lock timer if player tunes away
-            _lockTimer = 0f;
-            _lockChimePlayed = false;
-            if (_lockStatusText != null)
-                _lockStatusText.text = "";
-            if (_lockSlider != null)
-                _lockSlider.value = 0f;
+            // Decays if player drifts out of range
+            if (_lockTimer > 0f)
+            {
+                _lockTimer = Mathf.Max(0f, _lockTimer - Time.deltaTime * 0.8f);
+                float pct = Mathf.Clamp01(_lockTimer / LOCK_TIME_REQUIRED);
+                if (_lockStatusText != null)
+                    _lockStatusText.text = "<color=#FF8866>SIGNAL DRIFTED OUT! Realign to 98.4 FM</color>";
+                if (_lockSlider != null)
+                    _lockSlider.value = pct;
+            }
+            else
+            {
+                _lockChimePlayed = false;
+                if (_lockStatusText != null)
+                    _lockStatusText.text = "";
+                if (_lockSlider != null)
+                    _lockSlider.value = 0f;
+            }
         }
     }
 

@@ -81,6 +81,24 @@ public class ProceduralAudio : MonoBehaviour
     public void PlaySignalLockChime()          => PlayTone(1800f, 0.12f, 0.5f);
     public void PlaySignalLockedConfirmation() => PlayTone(2400f, 0.25f, 0.7f);
     public void PlayHeavyDoorUnlock()          => PlayTone(90f, 0.5f, 0.9f);
+    public void PlayBuzzer()                   => PlayTone(160f, 0.25f, 0.85f);
+
+    public void PlayWaterSurge()
+    {
+        int len = 44100;
+        float[] d = new float[len];
+        var rng = new System.Random(101);
+        float prev = 0f;
+        for (int i = 0; i < len; i++)
+        {
+            float t = (float)i / len;
+            float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+            prev = prev * 0.82f + noise * 0.18f;
+            float env = Mathf.Sin(Mathf.PI * t);
+            d[i] = prev * env * 0.95f;
+        }
+        PlayRaw(d, 44100);
+    }
 
     public void PlaySpark()
     {

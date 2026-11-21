@@ -1,12 +1,15 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class WaterController3D : MonoBehaviour
 {
+    public static WaterController3D Instance { get; private set; }
+
     [SerializeField] Transform waterPlane;
     [SerializeField] float startY = 0.15f;
     [SerializeField] float maxY = 0.85f;
-    [SerializeField] float riseSpeed = 0.0008333333f; // 0.70m over 840s (14 minutes)
+    [SerializeField] float riseSpeed = 0.001166667f; // 0.70m over 600s (10 minutes)
     [SerializeField] Transform radioTransform;
     [SerializeField] GameObject gameOverPanel;
     [SerializeField] Button restartButton;
@@ -36,10 +39,15 @@ public class WaterController3D : MonoBehaviour
 
     public bool Rising { get => _rising; set => _rising = value; }
 
+    void Awake()
+    {
+        Instance = this;
+    }
+
     void Start()
     {
-        // Calibrate rise speed to exactly 840 seconds (14 minutes) for realistic pacing
-        riseSpeed = (maxY - startY) / 840f;
+        // Calibrate rise speed to exactly 600 seconds (10 minutes)
+        riseSpeed = (maxY - startY) / 600f;
 
         if (waterPlane != null)
         {
@@ -103,6 +111,70 @@ public class WaterController3D : MonoBehaviour
     public void AddSpeedPercent(float percent)
     {
         _speedMultiplier += percent / 100f;
+    }
+
+    public void AddWaterSurge(float percent)
+    {
+        if (_gameOver || waterPlane == null) return;
+
+        float surgeMeters = (maxY - startY) * percent;
+        Vector3 pos = waterPlane.position;
+        pos.y = Mathf.Min(maxY, pos.y + surgeMeters);
+        waterPlane.position = pos;
+
+        // Play loud rushing water splash sound
+        ProceduralAudio.Instance?.PlayWaterSurge();
+
+        // Brief camera shake & screen edge flash
+        StartCoroutine(DoCameraShake(0.45f, 0.08f));
+        StartCoroutine(DoSurgeFlash());
+
+        float fillPct = Mathf.Clamp01((pos.y - startY) / (maxY - startY));
+        UpdateHUD(fillPct);
+
+        if (pos.y >= maxY)
+            TriggerGameOver();
+    }
+
+    IEnumerator DoCameraShake(float duration, float magnitude)
+    {
+        Camera cam = Camera.main;
+        if (cam == null) yield break;
+
+        Transform camT = cam.transform;
+        Vector3 origPos = camT.localPosition;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float x = (Random.value * 2f - 1f) * magnitude;
+            float y = (Random.value * 2f - 1f) * magnitude;
+            camT.localPosition = origPos + new Vector3(x, y, 0f);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        camT.localPosition = origPos;
+    }
+
+    IEnumerator DoSurgeFlash()
+    {
+        if (warningFlashImage == null) yield break;
+
+        Color surgeColor = new Color(0.1f, 0.2f, 0.85f, 0.45f); // Deep oceanic blue-red
+        float elapsed = 0f;
+        float dur = 0.5f;
+
+        while (elapsed < dur)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / dur;
+            float a = Mathf.Sin(t * Mathf.PI) * 0.45f;
+            warningFlashImage.color = new Color(surgeColor.r, surgeColor.g, surgeColor.b, a);
+            yield return null;
+        }
+
+        warningFlashImage.color = new Color(1f, 0f, 0f, 0f);
     }
 
     // ── HUD ──────────────────────────────────────────────────────────────────
