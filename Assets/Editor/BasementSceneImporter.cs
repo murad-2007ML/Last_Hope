@@ -23,9 +23,11 @@ public class BasementSceneImporter : AssetPostprocessor
 
     bool IsBasement => assetPath == FbxPath;
 
+    public const string VoidDoorsDir = "Assets/Resources/VoidDoors/";   // floating doors for DoorVoidEnding
+
     void OnPreprocessTexture()
     {
-        if (!assetPath.StartsWith(TexDir)) return;
+        if (!assetPath.StartsWith(TexDir) && !assetPath.StartsWith(VoidDoorsDir)) return;
         var ti = (TextureImporter)assetImporter;
         string n = Path.GetFileNameWithoutExtension(assetPath);
         if (n.EndsWith("_Normal")) ti.textureType = TextureImporterType.NormalMap;
@@ -37,6 +39,17 @@ public class BasementSceneImporter : AssetPostprocessor
 
     void OnPreprocessModel()
     {
+        if (assetPath.StartsWith(VoidDoorsDir))
+        {
+            // DoorVoidEnding combines these meshes at runtime, so they must stay readable (required in builds)
+            var vm = (ModelImporter)assetImporter;
+            vm.isReadable = true;
+            vm.materialImportMode = ModelImporterMaterialImportMode.None;
+            vm.bakeAxisConversion = true;
+            vm.addCollider = false;
+            vm.importCameras = false; vm.importLights = false;
+            return;
+        }
         if (!IsBasement) return;
         var mi = (ModelImporter)assetImporter;
         mi.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
@@ -116,5 +129,29 @@ public class BasementSceneImporter : AssetPostprocessor
         AssetDatabase.ImportAsset(TexDir.TrimEnd('/'), ImportAssetOptions.ImportRecursive | ImportAssetOptions.ForceUpdate);
         AssetDatabase.ImportAsset(FbxPath, ImportAssetOptions.ForceUpdate);
         Debug.Log("Basement reimported with baked URP materials.");
+    }
+
+    // Ensures URP/Lit is in Always Included Shaders so Shader.Find() and all runtime-created
+    // materials (transparent, alpha-clip, emission variants) survive build-time shader stripping.
+    [InitializeOnLoadMethod]
+    static void EnsureUrpLitAlwaysIncluded()
+    {
+        EditorApplication.delayCall += () =>
+        {
+            var gs = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>("ProjectSettings/GraphicsSettings.asset");
+            if (gs == null) return;
+            var so = new SerializedObject(gs);
+            var arr = so.FindProperty("m_AlwaysIncludedShaders");
+            if (arr == null) return;
+            var sh = Shader.Find("Universal Render Pipeline/Lit");
+            if (sh == null) return;
+            for (int i = 0; i < arr.arraySize; i++)
+                if (arr.GetArrayElementAtIndex(i).objectReferenceValue == sh) return;
+            arr.InsertArrayElementAtIndex(arr.arraySize);
+            arr.GetArrayElementAtIndex(arr.arraySize - 1).objectReferenceValue = sh;
+            so.ApplyModifiedProperties();
+            AssetDatabase.SaveAssets();
+            Debug.Log("[BasementSceneImporter] URP/Lit added to Always Included Shaders for build safety.");
+        };
     }
 }

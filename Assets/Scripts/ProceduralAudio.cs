@@ -8,6 +8,7 @@ public class ProceduralAudio : MonoBehaviour
 
     AudioSource _staticSrc;
     AudioSource _sfxSrc;
+    AudioSource _voidDroneSrc;
     float _staticAmount;
     float _heartbeatTimer;
     bool  _heartbeatActive;
@@ -207,6 +208,40 @@ public class ProceduralAudio : MonoBehaviour
         var clip = AudioClip.Create("clang", len, 1, sr, false);
         clip.SetData(d, 0);
         return clip;
+    }
+
+    // ── Void ambience (DoorVoidEnding optional audio) ────────────────────────
+
+    public void StartVoidAmbience()
+    {
+        if (_voidDroneSrc != null) return;
+        int sr = 44100, len = sr * 4;
+        float[] d = new float[len];
+        for (int i = 0; i < len; i++)
+        {
+            float t = (float)i / len;
+            float fade = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t * 8f)) *
+                         Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - t) * 8f));
+            d[i] = (Mathf.Sin(2f * Mathf.PI * 55f  * i / sr) * 0.5f +
+                    Mathf.Sin(2f * Mathf.PI * 82f  * i / sr) * 0.25f +
+                    Mathf.Sin(2f * Mathf.PI * 110f * i / sr) * 0.12f) * 0.14f * fade;
+        }
+        var clip = AudioClip.Create("VoidDrone", len, 1, sr, false);
+        clip.SetData(d, 0);
+        _voidDroneSrc = gameObject.AddComponent<AudioSource>();
+        _voidDroneSrc.clip = clip;
+        _voidDroneSrc.loop = true;
+        _voidDroneSrc.volume = 0.18f;
+        _voidDroneSrc.spatialBlend = 0f;
+        _voidDroneSrc.Play();
+    }
+
+    public void StopVoidAmbience()
+    {
+        if (_voidDroneSrc == null) return;
+        _voidDroneSrc.Stop();
+        Destroy(_voidDroneSrc);
+        _voidDroneSrc = null;
     }
 
     // ── Internals ────────────────────────────────────────────────────────────

@@ -154,6 +154,23 @@ public class PanicAttack3D : MonoBehaviour
         ScheduleNextPanic();
     }
 
+    // Called by DoorVoidEnding at cinematic start: immediately stops all panic state.
+    public void ForceEnd()
+    {
+        StopAllCoroutines();
+        _inPanic = false;
+        _isBlackingOut = false;
+        ProceduralAudio.Instance?.StopHeartbeat();
+        if (breathSlider != null) breathSlider.gameObject.SetActive(false);
+        SetVignette(0f);
+        SetChroma(0f);
+        if (cameraTransform != null)
+            cameraTransform.localEulerAngles = new Vector3(
+                cameraTransform.localEulerAngles.x,
+                cameraTransform.localEulerAngles.y, 0f);
+        enabled = false;
+    }
+
     void SetVignette(float intensity)
     {
         if (_vignette != null)

@@ -29,6 +29,7 @@ public class WaterController3D : MonoBehaviour
     float _speedMultiplier = 1f;
     bool _rising = true;
     bool _gameOver;
+    bool _cinematicMode;
     float _flashTimer;
     float _elapsed;
     bool _muradWaterLinePlayed;
@@ -39,6 +40,18 @@ public class WaterController3D : MonoBehaviour
     static readonly Color ColorCritical = new Color(0.9f,  0.1f,  0.1f);
 
     public bool Rising { get => _rising; set => _rising = value; }
+
+    // Called by DoorVoidEnding to suppress camera shake and game-over during the cinematic.
+    public void SetCinematicMode(bool on) => _cinematicMode = on;
+
+    public void SetHUDVisible(bool visible)
+    {
+        if (waterLevelSlider  != null) waterLevelSlider.gameObject.SetActive(visible);
+        if (waterLevelText    != null) waterLevelText.gameObject.SetActive(visible);
+        if (timeRemainingText != null) timeRemainingText.gameObject.SetActive(visible);
+        if (warningFlashImage != null) warningFlashImage.gameObject.SetActive(visible);
+        if (elapsedTimerText  != null) elapsedTimerText.gameObject.SetActive(visible);
+    }
 
     void Awake()
     {
@@ -180,6 +193,7 @@ public class WaterController3D : MonoBehaviour
 
     IEnumerator DoCameraShake(float duration, float magnitude)
     {
+        if (_cinematicMode) yield break;
         Camera cam = Camera.main;
         if (cam == null) yield break;
 

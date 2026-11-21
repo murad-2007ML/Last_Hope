@@ -338,6 +338,23 @@ public class DialogueManager : MonoBehaviour
         return null;
     }
 
+    // Called by DoorVoidEnding: stops any active voice line and clears the subtitle panel.
+    public void StopAndHide()
+    {
+        if (_typeCoroutine != null) { StopCoroutine(_typeCoroutine); _typeCoroutine = null; }
+        _rescuerSpeaking = false;
+        if (voiceSource != null) voiceSource.Stop();
+        SetSubtitleRaw("");
+    }
+
+    // Hides the persistent HUD elements (objective bar, waveform) but not the subtitle panel
+    // (that is already cleared by StopAndHide).
+    public void SetHUDVisible(bool visible)
+    {
+        if (objectiveText != null) objectiveText.gameObject.SetActive(visible);
+        if (waveformBar   != null) waveformBar.SetActive(visible);
+    }
+
     public void SetSubtitle(string text) => SetSubtitleRaw(text);
 
     public void SetObjective(string text)

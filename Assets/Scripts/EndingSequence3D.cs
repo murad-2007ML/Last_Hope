@@ -77,6 +77,10 @@ public class EndingSequence3D : MonoBehaviour
         SetSubtitle("");
         if (creditsText != null)
         {
+            // DoorVoidEnding's black-fade overlay sits at Canvas sortingOrder 50.
+            // Raise our canvas above it so the credits text is always readable.
+            var canvas = creditsText.GetComponentInParent<Canvas>();
+            if (canvas != null) canvas.sortingOrder = Mathf.Max(canvas.sortingOrder, 55);
             creditsText.gameObject.SetActive(true);
             creditsText.text = GetCreditsText();
         }

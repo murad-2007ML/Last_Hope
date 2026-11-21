@@ -247,4 +247,18 @@ public class PlayerInteraction : MonoBehaviour
     {
         if (promptText != null) promptText.text = text;
     }
+
+    // Called by DoorVoidEnding: ends any active valve hold, clears the prompt, and disables interaction.
+    public void StopInteraction()
+    {
+        if (_holdingValve)
+        {
+            _holdingValve = false;
+            puzzleManager?.EndValveHold();
+        }
+        _currentTarget = null;
+        _currentMatchedName = null;
+        SetPrompt("");
+        enabled = false;
+    }
 }

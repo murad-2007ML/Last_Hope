@@ -793,14 +793,23 @@ public class PuzzleManager3D : MonoBehaviour
         Quaternion start = (exitDoor != null) ? exitDoor.localRotation : Quaternion.identity;
         Quaternion end = start * Quaternion.Euler(0f, -90f, 0f);
 
-        // Final panic attack during hydraulic grind
-        panicSystem?.TriggerPanicNow();
+        // Build the "countless doors" void behind the door (visible through the gap while it opens)
+        DoorVoidEnding.Prepare(exitDoor);
+
+        // Arm immediately — cinematic starts as soon as the code is accepted, no waiting.
+        if (!triggerEndingCutsceneAutomatically) DoorVoidEnding.Arm();
+
+        // Panic only if the cinematic hasn't already taken control.
+        if (!DoorVoidEnding.IsCinematicActive) panicSystem?.TriggerPanicNow();
 
         float surgeTimer = 0f;
         float creakTimer = 0f;
 
         while (elapsed < duration)
         {
+            // Cinematic has taken over — stop grinding the door.
+            if (DoorVoidEnding.IsCinematicActive) break;
+
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / duration);
             float smooth = Mathf.SmoothStep(0f, 1f, t);
@@ -827,7 +836,8 @@ public class PuzzleManager3D : MonoBehaviour
             yield return null;
         }
 
-        if (exitDoor != null) exitDoor.localRotation = end;
+        // Only snap to fully-open if the cinematic hasn't already taken over (it will snap the door itself).
+        if (!DoorVoidEnding.IsCinematicActive && exitDoor != null) exitDoor.localRotation = end;
 
         onExitDoorOpened?.Invoke();
 

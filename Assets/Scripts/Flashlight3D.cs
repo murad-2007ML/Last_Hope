@@ -150,6 +150,19 @@ public class Flashlight3D : MonoBehaviour
         if (batterySlider != null) batterySlider.value = _battery;
     }
 
+    // Called by DoorVoidEnding: turns off spotlight and stops flashlight Update for the cinematic.
+    public void SetCinematicState()
+    {
+        if (spotLight != null) spotLight.enabled = false;
+        ShowPrompt(false);
+        enabled = false;
+    }
+
+    public void SetHUDVisible(bool visible)
+    {
+        if (batterySlider != null) batterySlider.gameObject.SetActive(visible);
+    }
+
     public void ShowPrompt(bool visible)
     {
         if (flashlightPromptPanel != null)

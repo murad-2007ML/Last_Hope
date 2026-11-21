@@ -19,7 +19,7 @@ public class DoorVoidEnding : MonoBehaviour
 
     [Header("Tuning")]
     public float catwalkLength = 140f;
-    public int doorCount = 600;
+    public int doorCount = 400;
     public float secondsBeforeCredits = 38f;
     [Tooltip("When the door is fully open, take control and fly the camera out, looking left, right and up")]
     public bool autoCinematic = true;
@@ -39,6 +39,8 @@ public class DoorVoidEnding : MonoBehaviour
     Text _hud, _hudR, _hudC;
     Image _fade;
     float _enterTime;
+    float _buildTime;
+    Quaternion _doorStartRot;
 
     // ------------------------------------------------------------------ public API
     public static void Prepare(Transform exitDoor)
@@ -55,7 +57,11 @@ public class DoorVoidEnding : MonoBehaviour
         if (_inst.autoCinematic) _inst.StartCoroutine(_inst.Cinematic());
     }
 
-    bool _cinematic, _cinematicDone;
+    bool _cinematic, _cinematicDone, _postFxAdded;
+    float _creakTimer;
+
+    // True while the camera-controlled cinematic is running (checked by WaterController3D etc.).
+    public static bool IsCinematicActive => _inst != null && _inst._cinematic && !_inst._cinematicDone;
 
     // Camera move (in catwalk space: x = right, y = up, z = forward into the void). Times in seconds.
     static readonly (float t, Vector3 p, Vector3 d)[] Shot =
@@ -76,15 +82,29 @@ public class DoorVoidEnding : MonoBehaviour
         _cinematic = true;
         var cam = Camera.main;
         if (cam == null) yield break;
+
         var fps = FirstPersonController.Instance;
         if (fps != null)
         {
-            fps.enabled = false;                                   // player no longer controls the camera
+            fps.enabled = false;
             var cc = fps.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
         }
+
+        // Freeze all gameplay systems so nothing fights the camera or interrupts the cinematic.
+        FreezeGameplaySystems();
+
+        // Camera setup: post-processing must be on before the fade-in reveals the void.
+        cam.farClipPlane = Mathf.Max(cam.farClipPlane, 400f);
+        var camData = cam.GetComponent<UniversalAdditionalCameraData>();
+        if (camData != null) camData.renderPostProcessing = true;
+
         EnsureHud();
+        AddPostFx();
+
         yield return Fade(0f, 1f, 0.6f);
+        // Snap the exit door fully open while the screen is black so it's already open when we fade in.
+        if (_door != null) _door.localRotation = _doorStartRot * Quaternion.Euler(0f, -90f, 0f);
         Transform camT = cam.transform;
         Vector3 W(Vector3 local) => _root.TransformPoint(local);
         Quaternion Look(Vector3 localDir) => Quaternion.LookRotation(_root.TransformDirection(localDir.normalized), Vector3.up);
@@ -99,12 +119,47 @@ public class DoorVoidEnding : MonoBehaviour
             while (i < Shot.Length - 2 && t > Shot[i + 1].t) i++;
             float u = Mathf.Clamp01(Mathf.InverseLerp(Shot[i].t, Shot[i + 1].t, t));
             Vector3 pos = CatmullRom(Shot[Mathf.Max(i - 1, 0)].p, Shot[i].p, Shot[i + 1].p, Shot[Mathf.Min(i + 2, Shot.Length - 1)].p, u);
-            pos.y += Mathf.Sin(t * 6.5f) * 0.012f;                  // gentle head bob
+            pos.y += Mathf.Sin(t * 6.5f) * 0.012f;
             camT.position = W(pos);
             camT.rotation = Quaternion.Slerp(Look(Shot[i].d), Look(Shot[i + 1].d), Mathf.SmoothStep(0f, 1f, u));
             yield return null;
         }
         _cinematicDone = true;
+    }
+
+    // Disables every gameplay system that could interrupt or visually fight the cinematic.
+    // Also hides the gameplay HUD; DoorVoidEnding's own overlay canvas (sortingOrder 50) is unaffected.
+    void FreezeGameplaySystems()
+    {
+        // Stop panic/blackout and clear vignette/chroma/sway
+        FindAnyObjectByType<PanicAttack3D>()?.ForceEnd();
+
+        // Stop water rising, suppress camera-shake, hide water HUD
+        if (WaterController3D.Instance != null)
+        {
+            WaterController3D.Instance.Rising = false;
+            WaterController3D.Instance.SetCinematicMode(true);
+            WaterController3D.Instance.SetHUDVisible(false);
+        }
+
+        // Stop any active voice line and hide subtitles / objective bar
+        DialogueManager.Instance?.StopAndHide();
+        DialogueManager.Instance?.SetHUDVisible(false);
+
+        // Disable radio so its Update loop doesn't re-trigger dialogue
+        var radio = FindAnyObjectByType<RadioSystem>();
+        if (radio != null) radio.enabled = false;
+
+        // Stop interaction and clear the prompt
+        FindAnyObjectByType<PlayerInteraction>()?.StopInteraction();
+
+        // Turn off spotlight and disable flashlight Update
+        Flashlight3D.Instance?.SetCinematicState();
+        Flashlight3D.Instance?.SetHUDVisible(false);
+
+        // Best-effort hide for objects that may exist in the scene
+        GameObject.Find("Crosshair")?.SetActive(false);
+        GameObject.Find("BreathSlider")?.SetActive(false);
     }
 
     static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
@@ -127,7 +182,7 @@ public class DoorVoidEnding : MonoBehaviour
 
     void EnsureHud() { if (_fade == null) BuildHud(); }
 
-#if UNITY_EDITOR || DEBUG
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void InstallDebugHotkey()
     {
@@ -156,7 +211,9 @@ public class DoorVoidEnding : MonoBehaviour
     {
         if (_built) return;
         _built = true;
+        _buildTime = Time.time;   // animation clock resets to 0 when the void is built
         _door = exitDoor;
+        _doorStartRot = exitDoor.localRotation;
 
         // Doorway frame of reference (works whatever axis conversion the FBX used)
         var dr = exitDoor.GetComponentInChildren<Renderer>();
@@ -453,7 +510,7 @@ public class DoorVoidEnding : MonoBehaviour
         {
             var l = new GameObject("VoidDoorLight").AddComponent<Light>();
             l.transform.SetParent(_root, false); l.transform.localPosition = p;
-            l.type = LightType.Point; l.range = 32f; l.intensity = 4f; l.color = new Color(0.78f, 0.84f, 0.92f);
+            l.type = LightType.Point; l.range = 20f; l.intensity = 3.5f; l.color = new Color(0.78f, 0.84f, 0.92f);
             l.shadows = LightShadows.None;
         }
         var sky = new GameObject("VoidSkyLight").AddComponent<Light>();
@@ -468,7 +525,18 @@ public class DoorVoidEnding : MonoBehaviour
     void Update()
     {
         if (!_built) return;
-        float t = Time.time;
+        float t = Time.time - _buildTime;   // seconds since the code was solved; animation starts at 0
+
+        // Distant door creaks — subtle ambient audio for the void.
+        if (_entered)
+        {
+            _creakTimer -= Time.deltaTime;
+            if (_creakTimer <= 0f)
+            {
+                _creakTimer = Random.Range(5f, 14f);
+                ProceduralAudio.Instance?.PlayDoorCreak();
+            }
+        }
         // code rain scrolls downward; catwalk glass code scrolls along the walkway
         if (_codeMat != null) _codeMat.SetTextureOffset("_BaseMap", new Vector2(0, t * 0.08f));
         if (_glassMat != null) _glassMat.SetTextureOffset("_BaseMap", new Vector2(0, -t * 0.25f));
@@ -500,6 +568,7 @@ public class DoorVoidEnding : MonoBehaviour
         var water = WaterController3D.Instance; if (water != null) water.Rising = false;
         ProceduralAudio.Instance?.SetStaticAmount(0.25f);
         ProceduralAudio.Instance?.StopHeartbeat();
+        ProceduralAudio.Instance?.StartVoidAmbience();
 
         if (_skyLight != null) _skyLight.enabled = true;
         RenderSettings.fog = true;
@@ -536,6 +605,7 @@ public class DoorVoidEnding : MonoBehaviour
         float f = 0;
         while (f < 1f) { f += Time.deltaTime / 3f; if (_fade != null) _fade.color = new Color(0, 0, 0, f); yield return null; }
         ProceduralAudio.Instance?.SetStaticAmount(0f);
+        ProceduralAudio.Instance?.StopVoidAmbience();
         var ending = FindAnyObjectByType<EndingSequence3D>();
         if (ending != null) ending.PlayCreditsOnly();
     }
@@ -608,6 +678,8 @@ public class DoorVoidEnding : MonoBehaviour
     // film grain, desaturation, vignette for the reveal
     void AddPostFx()
     {
+        if (_postFxAdded) return;
+        _postFxAdded = true;
         var go = new GameObject("VoidPostFX");
         var vol = go.AddComponent<Volume>(); vol.isGlobal = true; vol.priority = 100f;
         var prof = ScriptableObject.CreateInstance<VolumeProfile>();
