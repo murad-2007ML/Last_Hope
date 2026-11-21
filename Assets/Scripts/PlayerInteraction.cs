@@ -69,6 +69,14 @@ public class PlayerInteraction : MonoBehaviour
             string n = hit.collider.gameObject.name.ToLower();
             if (MatchesKeyword(n))
             {
+                // Silent gating: hide prompt and ignore interaction if not allowed in current stage
+                if (puzzleManager != null && !puzzleManager.IsInteractableAllowed(n))
+                {
+                    _currentTarget = null;
+                    SetPrompt("");
+                    return;
+                }
+
                 _currentTarget = hit.transform;
                 bool isValve   = n.Contains("pressure_valve");
                 SetPrompt(isValve
@@ -98,6 +106,8 @@ public class PlayerInteraction : MonoBehaviour
     void Interact(Transform t)
     {
         string n = t.name.ToLower();
+        if (puzzleManager != null && !puzzleManager.IsInteractableAllowed(n)) return;
+
         if      (n.Contains("vintage_radio")   || n.Contains("radio"))  radioSystem?.OpenPanel();
         else if (n.Contains("door_keypad")     || n.Contains("keypad")) puzzleManager?.OpenKeypad();
         else if (n.Contains("fuse_box")        || n.Contains("fuse"))   puzzleManager?.OpenFuseBox();

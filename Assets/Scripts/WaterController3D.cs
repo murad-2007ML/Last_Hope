@@ -6,7 +6,7 @@ public class WaterController3D : MonoBehaviour
     [SerializeField] Transform waterPlane;
     [SerializeField] float startY = 0.15f;
     [SerializeField] float maxY = 0.85f;
-    [SerializeField] float riseSpeed = 0.0012f;
+    [SerializeField] float riseSpeed = 0.0008333333f; // 0.70m over 840s (14 minutes)
     [SerializeField] Transform radioTransform;
     [SerializeField] GameObject gameOverPanel;
     [SerializeField] Button restartButton;
@@ -38,6 +38,9 @@ public class WaterController3D : MonoBehaviour
 
     void Start()
     {
+        // Calibrate rise speed to exactly 840 seconds (14 minutes) for realistic pacing
+        riseSpeed = (maxY - startY) / 840f;
+
         if (waterPlane != null)
         {
             Vector3 p = waterPlane.position;
@@ -87,7 +90,7 @@ public class WaterController3D : MonoBehaviour
         UpdateHUD(fillPct);
         UpdateWarningFlash(fillPct);
 
-        // Murad reacts when water hits 50%
+        // Murad reacts when water hits 50% (preserving character voice)
         if (!_muradWaterLinePlayed && fillPct >= 0.5f)
         {
             _muradWaterLinePlayed = true;

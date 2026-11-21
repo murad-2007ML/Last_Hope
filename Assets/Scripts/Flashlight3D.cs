@@ -8,6 +8,10 @@ public class Flashlight3D : MonoBehaviour
     [SerializeField] float drainRate    = 0.012f;
     [SerializeField] float lagSpeed     = 6f;
 
+    [Header("Flashlight Models")]
+    [SerializeField] GameObject flashlightStandard; // Standard unlit model ("Flashlight")
+    [SerializeField] GameObject flashlightColor;    // Lit model ("FlashlightColor")
+
     [Header("UI")]
     [SerializeField] Slider batterySlider;
     [SerializeField] GameObject flashlightPromptPanel;
@@ -27,7 +31,49 @@ public class Flashlight3D : MonoBehaviour
         // Start completely off
         if (spotLight != null) spotLight.intensity = 0f;
         _targetRot = transform.rotation;
+
+        FindFlashlightModels();
+
+        // Initially ensure standard model is visible and color model is hidden
+        if (flashlightStandard != null) flashlightStandard.SetActive(true);
+        if (flashlightColor != null) flashlightColor.SetActive(false);
+
         ShowPrompt(true);
+    }
+
+    void FindFlashlightModels()
+    {
+        Transform parentTransform = transform.parent != null ? transform.parent : transform;
+        var allChildren = parentTransform.GetComponentsInChildren<Transform>(true);
+
+        if (flashlightStandard == null)
+        {
+            foreach (var t in allChildren)
+            {
+                if (t.name.Equals("Flashlight", System.StringComparison.OrdinalIgnoreCase) && t != transform)
+                {
+                    flashlightStandard = t.gameObject;
+                    break;
+                }
+            }
+        }
+
+        if (flashlightColor == null)
+        {
+            foreach (var t in allChildren)
+            {
+                if (t.name.Equals("FlashlightColor", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    flashlightColor = t.gameObject;
+                    break;
+                }
+            }
+            if (flashlightColor == null)
+            {
+                var go = GameObject.Find("FlashlightColor");
+                if (go != null) flashlightColor = go;
+            }
+        }
     }
 
     void Update()
@@ -35,7 +81,8 @@ public class Flashlight3D : MonoBehaviour
         // Only toggle when no inspect panel is open
         bool anyPanelOpen = PuzzleManager3D.Instance != null && PuzzleManager3D.Instance.AnyPanelOpen;
 
-        if (Input.GetMouseButtonDown(1) && !anyPanelOpen)
+        // Support Left-Click (as requested) as well as Right-Click and F key
+        if ((Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F)) && !anyPanelOpen)
             Toggle();
 
         UpdateLight();
@@ -47,6 +94,10 @@ public class Flashlight3D : MonoBehaviour
     {
         _on = !_on;
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayFlashlightClick();
+
+        // Swap between standard model and illuminated FlashlightColor model
+        if (flashlightStandard != null) flashlightStandard.SetActive(!_on);
+        if (flashlightColor != null)    flashlightColor.SetActive(_on);
 
         if (_on && !_firstOnFired)
         {

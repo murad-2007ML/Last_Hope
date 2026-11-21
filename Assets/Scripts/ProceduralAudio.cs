@@ -78,6 +78,9 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayDoorCreak()   => PlayCreak();
     public void StartHeartbeat()  => _heartbeatActive = true;
     public void StopHeartbeat()   => _heartbeatActive = false;
+    public void PlaySignalLockChime()          => PlayTone(1800f, 0.12f, 0.5f);
+    public void PlaySignalLockedConfirmation() => PlayTone(2400f, 0.25f, 0.7f);
+    public void PlayHeavyDoorUnlock()          => PlayTone(90f, 0.5f, 0.9f);
 
     public void PlaySpark()
     {
