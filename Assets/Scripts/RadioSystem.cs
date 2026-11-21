@@ -18,10 +18,21 @@ public class RadioSystem : MonoBehaviour
 
     float _freq = 92.0f;
     bool  _panelOpen;
-    bool  _brokenPlayed;   // 104.5 bonus hint (not required)
-    bool  _backupPlayed;   // 98.4  — advances to stage 2
+    bool  _brokenPlayed;
+    bool  _backupPlayed;
+
+    AudioClip _clipBroken, _clipBackup, _clipValveGuide, _clipCodeGuide;
 
     public bool PanelOpen => _panelOpen;
+
+    void Start()
+    {
+        _clipBroken     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_02_broken");
+        _clipBackup     = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_03_wires");
+        _clipValveGuide = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_04_valve");
+        _clipCodeGuide  = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_05_code");
+        Debug.Log($"[RadioSystem] Rescuer clips — broken:{_clipBroken != null} backup:{_clipBackup != null} valve:{_clipValveGuide != null} code:{_clipCodeGuide != null}");
+    }
 
     public void OpenPanel()
     {
@@ -95,7 +106,8 @@ public class RadioSystem : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetStaticAmount(0.2f);
         DialogueManager.Instance?.SpeakRescuer(
-            "Signal is dying... Can you hear me? Check the Sector B emergency note and tune to 98.4 FM!");
+            "Signal is dying... Can you hear me? Check the Sector B emergency note and tune to 98.4 FM!",
+            _clipBroken);
     }
 
     IEnumerator PlayBackup()
@@ -105,7 +117,7 @@ public class RadioSystem : MonoBehaviour
         bool done = false;
         DialogueManager.Instance?.SpeakRescuer(
             "The magnetic lock is frozen. Check the wall clock — if it stopped before 04:00, open the fuse box and cut the YELLOW wire first, then the BLUE wire. Do NOT touch the red wire!",
-            null, () => done = true);
+            _clipBackup, () => done = true);
         while (!done) yield return null;
         PuzzleManager3D.Instance?.OnRadioStage2Ready();
     }
@@ -114,14 +126,16 @@ public class RadioSystem : MonoBehaviour
     {
         yield return new WaitForSeconds(1.2f);
         DialogueManager.Instance?.SpeakRescuer(
-            "Second lock is jammed by water pressure. I'm banging a wrench on the main pipe from outside — listen closely, find which pipe the sound comes from, and turn its valve!");
+            "Second lock is jammed by water pressure. I'm banging a wrench on the main pipe from outside — listen closely, find which pipe the sound comes from, and turn its valve!",
+            _clipValveGuide);
     }
 
     IEnumerator PlayCodeGuide()
     {
         yield return new WaitForSeconds(1.0f);
         DialogueManager.Instance?.SpeakRescuer(
-            "Last lock! Combine the two digits under the sun drawing on the wall with the two digits on the back of the photo floating in the water, and enter the 4-digit code!");
+            "Last lock! Combine the two digits under the sun drawing on the wall with the two digits on the back of the photo floating in the water, and enter the 4-digit code!",
+            _clipCodeGuide);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -26,6 +26,17 @@ public class DialogueManager : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+
+        // Self-heal: create AudioSource if none was wired
+        if (voiceSource == null)
+        {
+            voiceSource = gameObject.AddComponent<AudioSource>();
+            voiceSource.spatialBlend = 0f;
+            voiceSource.volume = 1f;
+            voiceSource.playOnAwake = false;
+            Debug.LogWarning("[DialogueManager] voiceSource was null — created one automatically.");
+        }
+
         HideChoices();
         SetSubtitleRaw("");
     }
@@ -82,8 +93,15 @@ public class DialogueManager : MonoBehaviour
         if (subtitlePanel != null) subtitlePanel.transform.SetAsLastSibling();
         SetSubtitleRaw("");
 
-        if (voiceSource != null && clip != null)
+        if (clip != null)
+        {
+            Debug.Log($"[DialogueManager] Playing clip: {clip.name} ({clip.length:F1}s)");
             voiceSource.PlayOneShot(clip);
+        }
+        else
+        {
+            Debug.LogWarning("[DialogueManager] clip is NULL — no audio will play for this line.");
+        }
 
         int blipEvery = isRescuer ? 4 : 6;
         int i = 0;

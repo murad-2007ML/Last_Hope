@@ -27,6 +27,7 @@ public class WaterController3D : MonoBehaviour
     bool _gameOver;
     float _flashTimer;
     float _elapsed;
+    bool _muradWaterLinePlayed;
 
     // Colors for fill bar: safe → danger → critical
     static readonly Color ColorSafe     = new Color(0.15f, 0.45f, 0.85f);
@@ -85,6 +86,15 @@ public class WaterController3D : MonoBehaviour
         float fillPct = Mathf.Clamp01((pos.y - startY) / (maxY - startY));
         UpdateHUD(fillPct);
         UpdateWarningFlash(fillPct);
+
+        // Murad reacts when water hits 50%
+        if (!_muradWaterLinePlayed && fillPct >= 0.5f)
+        {
+            _muradWaterLinePlayed = true;
+            var clip = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
+            DialogueManager.Instance?.SpeakMurad(
+                "The water... it's rising faster. You have to hurry.", clip);
+        }
     }
 
     public void AddSpeedPercent(float percent)

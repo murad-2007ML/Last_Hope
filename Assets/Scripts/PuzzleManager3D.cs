@@ -57,6 +57,9 @@ public class PuzzleManager3D : MonoBehaviour
 
     EndingSequence3D _ending;
 
+    AudioClip _muradWake, _muradWater, _muradValve, _muradEnd;
+    AudioClip _rescuerIntro;
+
     void Awake()
     {
         Instance = this;
@@ -70,6 +73,12 @@ public class PuzzleManager3D : MonoBehaviour
 
     void Start()
     {
+        _muradWake  = Resources.Load<AudioClip>("Audio/Murad/murad_01_wake");
+        _muradWater = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
+        _muradValve = Resources.Load<AudioClip>("Audio/Murad/murad_03_valve");
+        _muradEnd   = Resources.Load<AudioClip>("Audio/Murad/murad_04_end");
+        _rescuerIntro = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_01_intro");
+        Debug.Log($"[PuzzleManager] Murad clips — wake:{_muradWake != null} water:{_muradWater != null} valve:{_muradValve != null} end:{_muradEnd != null}");
         BuildLockLightMaterials();
         if (valveAudioSource != null)
         {
@@ -97,7 +106,7 @@ public class PuzzleManager3D : MonoBehaviour
         bool done = false;
         DialogueManager.Instance?.SpeakMurad(
             "You're finally awake... My leg is pinned under this concrete, I can't move. Check the radio on the table!",
-            null, () => done = true);
+            _muradWake, () => done = true);
         while (!done) yield return null;
 
         yield return new WaitForSeconds(0.8f);
@@ -108,7 +117,7 @@ public class PuzzleManager3D : MonoBehaviour
         done = false;
         DialogueManager.Instance?.SpeakRescuer(
             "Hello?! Can anyone hear me? Signal is dying... Check the Sector B note on the far desk and tune the radio to 98.4 FM!",
-            null, () => done = true);
+            _rescuerIntro, () => done = true);
         while (!done) yield return null;
 
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetStaticAmount(1f);
@@ -136,6 +145,9 @@ public class PuzzleManager3D : MonoBehaviour
         if (valveAudioSource != null) valveAudioSource.Play();
         radioSystem?.OnWiresComplete();
         SetObjective("Find the clanging pipe and turn its valve");
+        DialogueManager.Instance?.SpeakMurad(
+            "I can hear the pipes from here. That sound... it's coming from behind the wall.",
+            _muradValve);
     }
 
     void CompleteValveStage()
@@ -350,7 +362,10 @@ public class PuzzleManager3D : MonoBehaviour
             UnlockLight(lockLight3, 3);
             if (keypadPanelUI != null) keypadPanelUI.SetActive(false);
             if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = true;
-            _ending?.Trigger();
+            DialogueManager.Instance?.SpeakMurad(
+            "Go... don't look back. I'll find another way out. I promise.",
+            _muradEnd);
+        _ending?.Trigger();
         }
         else
         {

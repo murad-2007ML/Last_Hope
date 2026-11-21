@@ -18,6 +18,12 @@ public class EndingSequence3D : MonoBehaviour
     [SerializeField] Text endingSubtitle;
 
     bool _triggered;
+    AudioClip _clipEnding;
+
+    void Start()
+    {
+        _clipEnding = Resources.Load<AudioClip>("Audio/Rescuer/rescuer_06_ending");
+    }
 
     public void Trigger()
     {
@@ -57,7 +63,7 @@ public class EndingSequence3D : MonoBehaviour
         {
             DialogueManager.Instance.SpeakRescuer(
                 "There was no one else in there with you...",
-                null,
+                _clipEnding,
                 null);
         }
         yield return new WaitForSeconds(5.0f);
