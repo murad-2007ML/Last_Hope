@@ -21,11 +21,13 @@ public class Flashlight3D : MonoBehaviour
     bool  _firstOnFired;
     Quaternion _targetRot;
 
+    public static Flashlight3D Instance { get; private set; }
     public float Battery => _battery;
     public bool  IsOn    => _on;
 
     void Awake()
     {
+        Instance = this;
         if (spotLight == null)
             spotLight = GetComponentInChildren<Light>();
         // Start completely off
@@ -38,7 +40,8 @@ public class Flashlight3D : MonoBehaviour
         if (flashlightStandard != null) flashlightStandard.SetActive(true);
         if (flashlightColor != null) flashlightColor.SetActive(false);
 
-        ShowPrompt(true);
+        // Keep prompt hidden until WakeUpIntro awakens the player at 3.5s
+        ShowPrompt(false);
     }
 
     void FindFlashlightModels()
@@ -83,17 +86,10 @@ public class Flashlight3D : MonoBehaviour
 
         if (!anyPanelOpen)
         {
-            if (!_on)
+            // Toggle strictly with Right-Click or F. Left-Click is NEVER used for flashlight!
+            if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F))
             {
-                // Initial turn on with Left-Click, Right-Click, or F
-                if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F))
-                    Toggle();
-            }
-            else
-            {
-                // Toggle with Right-Click or F (leaving Left-Click for UI/interaction)
-                if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F))
-                    Toggle();
+                Toggle();
             }
         }
 
@@ -111,14 +107,18 @@ public class Flashlight3D : MonoBehaviour
         if (flashlightStandard != null) flashlightStandard.SetActive(!_on);
         if (flashlightColor != null)    flashlightColor.SetActive(_on);
 
-        if (_on && !_firstOnFired)
+        // Always hide prompt when flashlight is turned on
+        if (_on)
         {
-            _firstOnFired = true;
             ShowPrompt(false);
-            if (PuzzleManager3D.Instance != null)
-                PuzzleManager3D.Instance.OnFirstFlashlightOn();
-            else
-                FindFirstObjectByType<PuzzleManager3D>()?.OnFirstFlashlightOn();
+            if (!_firstOnFired)
+            {
+                _firstOnFired = true;
+                if (PuzzleManager3D.Instance != null)
+                    PuzzleManager3D.Instance.OnFirstFlashlightOn();
+                else
+                    FindAnyObjectByType<PuzzleManager3D>()?.OnFirstFlashlightOn();
+            }
         }
     }
 
@@ -150,8 +150,38 @@ public class Flashlight3D : MonoBehaviour
         if (batterySlider != null) batterySlider.value = _battery;
     }
 
-    void ShowPrompt(bool visible)
+    public void ShowPrompt(bool visible)
     {
-        if (flashlightPromptPanel != null) flashlightPromptPanel.SetActive(visible);
+        if (flashlightPromptPanel != null)
+        {
+            if (visible)
+            {
+                var tmp = flashlightPromptPanel.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+                if (tmp != null) tmp.text = "Right-Click to turn on Flashlight";
+                else
+                {
+                    var legacy = flashlightPromptPanel.GetComponentInChildren<Text>(true);
+                    if (legacy != null) legacy.text = "Right-Click to turn on Flashlight";
+                }
+            }
+            flashlightPromptPanel.SetActive(visible);
+        }
+
+        // Also ensure all instances of FlashlightPrompt in scene match requested visibility
+        var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+        if (activeScene.isLoaded)
+        {
+            var roots = activeScene.GetRootGameObjects();
+            foreach (var r in roots)
+            {
+                foreach (var t in r.GetComponentsInChildren<Transform>(true))
+                {
+                    if (t != null && t.name == "FlashlightPrompt")
+                    {
+                        t.gameObject.SetActive(visible);
+                    }
+                }
+            }
+        }
     }
 }

@@ -100,6 +100,52 @@ public class ProceduralAudio : MonoBehaviour
         PlayRaw(d, 44100);
     }
 
+    public void PlayPipeBurst()
+    {
+        int sr = 44100;
+        int len = sr; // 1.0s metallic rupture + high pressure spray
+        float[] d = new float[len];
+        var rng = new System.Random(2026);
+        float prevNoise = 0f;
+        for (int i = 0; i < len; i++)
+        {
+            float t = (float)i / len;
+            // Heavy metal rupture hit
+            float clangEnv = Mathf.Exp(-t * 8.5f);
+            float clang = (Mathf.Sin(2f * Mathf.PI * 130f * i / sr)
+                        + Mathf.Sin(2f * Mathf.PI * 270f * i / sr) * 0.6f
+                        + Mathf.Sin(2f * Mathf.PI * 540f * i / sr) * 0.35f) * clangEnv * 0.75f;
+            // Pressurized water burst hiss
+            float hissEnv = Mathf.Sin(Mathf.PI * Mathf.Clamp01(t * 1.5f)) * Mathf.Exp(-t * 2.2f);
+            float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+            prevNoise = prevNoise * 0.72f + noise * 0.28f;
+            float hiss = prevNoise * hissEnv * 0.65f;
+            d[i] = Mathf.Clamp(clang + hiss, -1f, 1f);
+        }
+        PlayRaw(d, sr);
+    }
+
+    public static AudioClip GenerateGushingWaterClip(float duration = 2.5f, int sr = 44100)
+    {
+        int len = Mathf.RoundToInt(duration * sr);
+        float[] d = new float[len];
+        var rng = new System.Random(888);
+        float prev = 0f;
+        for (int i = 0; i < len; i++)
+        {
+            float t = (float)i / len;
+            float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+            // Lowpass pink-ish water noise
+            prev = prev * 0.86f + noise * 0.14f;
+            // Modulate with gentle turbulence so it sounds like rushing, pouring liquid
+            float lfo = 0.82f + 0.18f * Mathf.Sin(2f * Mathf.PI * 2.4f * t);
+            d[i] = prev * lfo * 0.75f;
+        }
+        var clip = AudioClip.Create("GushingWaterLoop", len, 1, sr, false);
+        clip.SetData(d, 0);
+        return clip;
+    }
+
     public void PlaySpark()
     {
         int n = 44100 / 8;

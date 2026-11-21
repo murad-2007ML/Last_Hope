@@ -1,10 +1,11 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class PlayerInteraction : MonoBehaviour
 {
     [SerializeField] float interactRange = 3.5f;
-    [SerializeField] Text  promptText;
+    [SerializeField] TextMeshProUGUI promptText;
     [SerializeField] Camera playerCamera;
 
     [Header("Systems")]
@@ -25,8 +26,22 @@ public class PlayerInteraction : MonoBehaviour
     void Awake()
     {
         if (playerCamera == null) playerCamera = Camera.main;
-        if (radioSystem == null) radioSystem = FindFirstObjectByType<RadioSystem>();
-        if (puzzleManager == null) puzzleManager = FindFirstObjectByType<PuzzleManager3D>();
+        if (radioSystem == null) radioSystem = FindAnyObjectByType<RadioSystem>();
+        if (puzzleManager == null) puzzleManager = FindAnyObjectByType<PuzzleManager3D>();
+
+        if (promptText == null)
+        {
+            var go = GameObject.Find("PromptText");
+            if (go != null)
+            {
+                promptText = go.GetComponent<TextMeshProUGUI>();
+                if (promptText == null)
+                {
+                    var legacy = go.GetComponent<Text>();
+                    if (legacy != null) promptText = DialogueManager.UpgradeTextToTMP(legacy);
+                }
+            }
+        }
     }
 
     void Start()
@@ -37,7 +52,7 @@ public class PlayerInteraction : MonoBehaviour
     public void EnsureInteractableColliders()
     {
         // Guarantee raycast hit for Vintage_Radio and other puzzle objects
-        var allT = FindObjectsByType<Transform>(FindObjectsSortMode.None);
+        var allT = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (var t in allT)
         {
             string n = t.name.ToLower();
@@ -73,6 +88,22 @@ public class PlayerInteraction : MonoBehaviour
         {
             puzzleManager?.CloseAllPanels();
             radioSystem?.ClosePanel();
+            return;
+        }
+
+        // When any UI panel is open, suspend 3D world raycast & interaction
+        bool anyPanelOpen = (puzzleManager != null && puzzleManager.AnyPanelOpen) ||
+                            (radioSystem != null && radioSystem.PanelOpen);
+        if (anyPanelOpen)
+        {
+            if (_holdingValve)
+            {
+                _holdingValve = false;
+                puzzleManager?.EndValveHold();
+            }
+            _currentTarget = null;
+            _currentMatchedName = null;
+            SetPrompt("");
             return;
         }
 

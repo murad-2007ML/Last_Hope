@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class EndingSequence3D : MonoBehaviour
 {
@@ -14,11 +15,41 @@ public class EndingSequence3D : MonoBehaviour
     [Header("UI")]
     [SerializeField] Image whiteFlash;
     [SerializeField] Image blackFade;
-    [SerializeField] Text creditsText;
-    [SerializeField] Text endingSubtitle;
+    [SerializeField] TextMeshProUGUI creditsText;
+    [SerializeField] TextMeshProUGUI endingSubtitle;
 
     bool _triggered;
     AudioClip _clipEnding;
+
+    void Awake()
+    {
+        if (creditsText == null)
+        {
+            var go = GameObject.Find("CreditsText");
+            if (go != null)
+            {
+                creditsText = go.GetComponent<TextMeshProUGUI>();
+                if (creditsText == null)
+                {
+                    var legacy = go.GetComponent<Text>();
+                    if (legacy != null) creditsText = DialogueManager.UpgradeTextToTMP(legacy);
+                }
+            }
+        }
+        if (endingSubtitle == null)
+        {
+            var go = GameObject.Find("EndingSubtitle");
+            if (go != null)
+            {
+                endingSubtitle = go.GetComponent<TextMeshProUGUI>();
+                if (endingSubtitle == null)
+                {
+                    var legacy = go.GetComponent<Text>();
+                    if (legacy != null) endingSubtitle = DialogueManager.UpgradeTextToTMP(legacy);
+                }
+            }
+        }
+    }
 
     void Start()
     {

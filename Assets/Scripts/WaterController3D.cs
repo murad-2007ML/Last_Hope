@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class WaterController3D : MonoBehaviour
 {
@@ -18,12 +19,12 @@ public class WaterController3D : MonoBehaviour
     [Header("Water Level HUD")]
     [SerializeField] Slider waterLevelSlider;
     [SerializeField] Image waterFillImage;
-    [SerializeField] Text waterLevelText;
-    [SerializeField] Text timeRemainingText;
+    [SerializeField] TextMeshProUGUI waterLevelText;
+    [SerializeField] TextMeshProUGUI timeRemainingText;
     [SerializeField] Image warningFlashImage;
 
     [Header("Elapsed Timer")]
-    [SerializeField] Text elapsedTimerText;
+    [SerializeField] TextMeshProUGUI elapsedTimerText;
 
     float _speedMultiplier = 1f;
     bool _rising = true;
@@ -42,6 +43,50 @@ public class WaterController3D : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        AutoUpgradeUI();
+    }
+
+    void AutoUpgradeUI()
+    {
+        if (waterLevelText == null)
+        {
+            var go = GameObject.Find("WaterLevelText");
+            if (go != null)
+            {
+                waterLevelText = go.GetComponent<TextMeshProUGUI>();
+                if (waterLevelText == null)
+                {
+                    var legacy = go.GetComponent<Text>();
+                    if (legacy != null) waterLevelText = DialogueManager.UpgradeTextToTMP(legacy);
+                }
+            }
+        }
+        if (timeRemainingText == null)
+        {
+            var go = GameObject.Find("TimeRemainingText");
+            if (go != null)
+            {
+                timeRemainingText = go.GetComponent<TextMeshProUGUI>();
+                if (timeRemainingText == null)
+                {
+                    var legacy = go.GetComponent<Text>();
+                    if (legacy != null) timeRemainingText = DialogueManager.UpgradeTextToTMP(legacy);
+                }
+            }
+        }
+        if (elapsedTimerText == null)
+        {
+            var go = GameObject.Find("ElapsedTimerText");
+            if (go != null)
+            {
+                elapsedTimerText = go.GetComponent<TextMeshProUGUI>();
+                if (elapsedTimerText == null)
+                {
+                    var legacy = go.GetComponent<Text>();
+                    if (legacy != null) elapsedTimerText = DialogueManager.UpgradeTextToTMP(legacy);
+                }
+            }
+        }
     }
 
     void Start()
@@ -51,10 +96,12 @@ public class WaterController3D : MonoBehaviour
 
         if (waterPlane != null)
         {
+            waterPlane.gameObject.SetActive(true);
             Vector3 p = waterPlane.position;
             p.y = startY;
             waterPlane.position = p;
         }
+
         if (restartButton != null)
             restartButton.onClick.AddListener(RestartGame);
         if (gameOverPanel != null)
@@ -88,9 +135,6 @@ public class WaterController3D : MonoBehaviour
         if (fpsController != null)
             fpsController.IsWading = pos.y > 0.3f;
 
-        if (radioTransform != null && pos.y >= radioTransform.position.y)
-            TriggerGameOver();
-
         if (pos.y >= maxY)
             TriggerGameOver();
 
@@ -98,13 +142,11 @@ public class WaterController3D : MonoBehaviour
         UpdateHUD(fillPct);
         UpdateWarningFlash(fillPct);
 
-        // Murad reacts when water hits 50% (preserving character voice)
+        // Murad reacts when water hits 50%
         if (!_muradWaterLinePlayed && fillPct >= 0.5f)
         {
             _muradWaterLinePlayed = true;
-            var clip = Resources.Load<AudioClip>("Audio/Murad/murad_02_water");
-            DialogueManager.Instance?.SpeakMurad(
-                "The water... it's rising faster. You have to hurry.", clip);
+            DialogueManager.Instance?.PlayEntry("murad_02_water");
         }
     }
 
@@ -161,7 +203,7 @@ public class WaterController3D : MonoBehaviour
     {
         if (warningFlashImage == null) yield break;
 
-        Color surgeColor = new Color(0.1f, 0.2f, 0.85f, 0.45f); // Deep oceanic blue-red
+        Color surgeColor = new Color(0.1f, 0.2f, 0.85f, 0.45f);
         float elapsed = 0f;
         float dur = 0.5f;
 
@@ -200,7 +242,7 @@ public class WaterController3D : MonoBehaviour
         // Time remaining estimate (meters left / current rise speed)
         if (timeRemainingText != null)
         {
-            if (_rising && waterPlane != null)
+            if (_rising && waterPlane != null && waterPlane.gameObject.activeSelf)
             {
                 float metersLeft = maxY - waterPlane.position.y;
                 float secsLeft   = metersLeft / (riseSpeed * _speedMultiplier);
@@ -223,7 +265,6 @@ public class WaterController3D : MonoBehaviour
         if (warningFlashImage == null) return;
         if (fillPct < 0.75f) { warningFlashImage.color = new Color(1f, 0f, 0f, 0f); return; }
 
-        // Pulse red at screen edges when critical
         _flashTimer += Time.deltaTime * Mathf.Lerp(1.5f, 4f, (fillPct - 0.75f) / 0.25f);
         float alpha = (Mathf.Sin(_flashTimer) * 0.5f + 0.5f) * Mathf.Lerp(0.05f, 0.22f, (fillPct - 0.75f) / 0.25f);
         warningFlashImage.color = new Color(1f, 0f, 0f, alpha);

@@ -20,6 +20,8 @@ public class FirstPersonController : MonoBehaviour
     bool _locked = true;
     bool _isWading;
 
+    public bool MovementLocked { get; set; }
+
     public bool MouseLocked
     {
         get => _locked;
@@ -46,7 +48,7 @@ public class FirstPersonController : MonoBehaviour
 
     void Update()
     {
-        if (!_locked) return;
+        if (!_locked || MovementLocked) return;
         HandleLook();
         HandleMove();
         HandleBob();

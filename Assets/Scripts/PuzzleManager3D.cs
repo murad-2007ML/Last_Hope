@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using TMPro;
 
 public enum PuzzleStage
 {
@@ -43,7 +44,7 @@ public class PuzzleManager3D : MonoBehaviour
     [SerializeField] AudioSource valveAudioSource;
     [SerializeField] GameObject  valveHoldUI;
     [SerializeField] Slider      valveProgressSlider;
-    [SerializeField] Text        valveProgressText;
+    [SerializeField] TextMeshProUGUI valveProgressText;
 
     [Header("Systems")]
     [SerializeField] RadioSystem   radioSystem;
@@ -53,9 +54,9 @@ public class PuzzleManager3D : MonoBehaviour
     [SerializeField] GameObject fusePanelUI;
     [SerializeField] GameObject keypadPanelUI;
     [SerializeField] GameObject clueInspectPanel;
-    [SerializeField] Text       clueInspectText;
-    [SerializeField] Text       keypadDisplay;
-    [SerializeField] Text       statusText;
+    [SerializeField] TextMeshProUGUI clueInspectText;
+    [SerializeField] TextMeshProUGUI keypadDisplay;
+    [SerializeField] TextMeshProUGUI statusText;
 
     [Header("Exit Door")]
     [SerializeField] Transform exitDoor;
@@ -86,17 +87,72 @@ public class PuzzleManager3D : MonoBehaviour
     AudioClip _muradWake, _muradWater, _muradValve, _muradEnd;
     AudioClip _rescuerIntro;
 
+    // Cached UI Buttons
+    Button _btnRed;
+    Button _btnBlue;
+    Button _btnYellow;
+    Button _btnCloseFuse;
+    Button _btnCloseClue;
+    Button _btnCloseKeypad;
+
     void Awake()
     {
         Instance = this;
-        _ending = FindObjectOfType<EndingSequence3D>();
+        _ending = FindAnyObjectByType<EndingSequence3D>();
+
+        EnsureEventSystemInputModule();
 
         if (fusePanelUI      != null) fusePanelUI.SetActive(false);
         if (keypadPanelUI    != null) keypadPanelUI.SetActive(false);
         if (clueInspectPanel != null) clueInspectPanel.SetActive(false);
         if (valveHoldUI      != null) valveHoldUI.SetActive(false);
 
+        AutoUpgradeTMP();
         WireButtons();
+    }
+
+    void AutoUpgradeTMP()
+    {
+        if (clueInspectText == null && clueInspectPanel != null)
+        {
+            clueInspectText = clueInspectPanel.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (clueInspectText == null)
+            {
+                var legacy = clueInspectPanel.GetComponentInChildren<Text>(true);
+                if (legacy != null) clueInspectText = DialogueManager.UpgradeTextToTMP(legacy);
+            }
+        }
+        if (keypadDisplay == null && keypadPanelUI != null)
+        {
+            keypadDisplay = keypadPanelUI.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (keypadDisplay == null)
+            {
+                var legacy = keypadPanelUI.GetComponentInChildren<Text>(true);
+                if (legacy != null) keypadDisplay = DialogueManager.UpgradeTextToTMP(legacy);
+            }
+        }
+        if (valveProgressText == null && valveHoldUI != null)
+        {
+            valveProgressText = valveHoldUI.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (valveProgressText == null)
+            {
+                var legacy = valveHoldUI.GetComponentInChildren<Text>(true);
+                if (legacy != null) valveProgressText = DialogueManager.UpgradeTextToTMP(legacy);
+            }
+        }
+        if (statusText == null)
+        {
+            var go = GameObject.Find("StatusText");
+            if (go != null)
+            {
+                statusText = go.GetComponent<TextMeshProUGUI>();
+                if (statusText == null)
+                {
+                    var legacy = go.GetComponent<Text>();
+                    if (legacy != null) statusText = DialogueManager.UpgradeTextToTMP(legacy);
+                }
+            }
+        }
     }
 
     void Start()
@@ -113,7 +169,7 @@ public class PuzzleManager3D : MonoBehaviour
         SetupValves();
         SetupSweetSpotIndicator();
 
-        SetObjective("Explore the basement — turn on your flashlight [LEFT CLICK]");
+        SetObjective("Explore the basement — turn on your flashlight [RIGHT-CLICK]");
     }
 
     void AutoFindReferences()
@@ -126,13 +182,13 @@ public class PuzzleManager3D : MonoBehaviour
         if (valveAudioSource == null && pressureValve != null)
             valveAudioSource = pressureValve.GetComponent<AudioSource>();
 
-        if (radioSystem == null) radioSystem = FindFirstObjectByType<RadioSystem>();
-        if (panicSystem == null) panicSystem = FindFirstObjectByType<PanicAttack3D>();
-        if (waterController == null) waterController = FindFirstObjectByType<WaterController3D>();
+        if (radioSystem == null) radioSystem = FindAnyObjectByType<RadioSystem>();
+        if (panicSystem == null) panicSystem = FindAnyObjectByType<PanicAttack3D>();
+        if (waterController == null) waterController = FindAnyObjectByType<WaterController3D>();
 
         if (exitDoor == null)
         {
-            var allT = FindObjectsByType<Transform>(FindObjectsSortMode.None);
+            var allT = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var t in allT)
             {
                 if (t.name.ToLower().Contains("exit_door"))
@@ -281,23 +337,32 @@ public class PuzzleManager3D : MonoBehaviour
 
     IEnumerator OpeningSequence()
     {
-        yield return new WaitForSeconds(1.0f);
+        // 1. Wait until Murad's wake-up dialogue finishes completely so it is never skipped or cut off!
+        while (DialogueManager.Instance != null && DialogueManager.Instance.IsSpeaking)
+        {
+            yield return null;
+        }
 
-        bool done = false;
-        DialogueManager.Instance?.SpeakMurad(
-            "You're finally awake... My leg is pinned under this concrete, I can't move. Check the radio on the table!",
-            _muradWake, () => done = true);
-        while (!done) yield return null;
+        // Murad's wake-up line was already triggered by WakeUpIntro at 0.6s.
+        // If wake-up was skipped or not played, play Murad line first:
+        if (!WakeUpIntro.IntroPlayed)
+        {
+            bool muradDone = false;
+            DialogueManager.Instance?.SpeakMurad(
+                "You're finally awake... My leg is pinned under this concrete, I can't move. Check the radio on the table!",
+                _muradWake, () => muradDone = true);
+            while (!muradDone) yield return null;
+        }
 
-        yield return new WaitForSeconds(0.6f);
-        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetStaticAmount(0.9f);
+        // Natural pause (1.2 seconds) after Murad finishes speaking before radio emergency static starts
+        yield return new WaitForSeconds(1.2f);
+
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetStaticAmount(0.85f);
         yield return new WaitForSeconds(0.6f);
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetStaticAmount(0.25f);
 
-        done = false;
-        DialogueManager.Instance?.SpeakRescuer(
-            "Hello?! Can anyone hear me? Signal is dying... Check Note #1 and Note #2, apply the offset, and tune the radio!",
-            _rescuerIntro, () => done = true);
+        bool done = false;
+        DialogueManager.Instance?.PlayEntry("Stage1_Rescuer", () => done = true);
         while (!done) yield return null;
 
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetStaticAmount(0f);
@@ -456,15 +521,32 @@ public class PuzzleManager3D : MonoBehaviour
 
     void ShowClue(string text)
     {
-        if (clueInspectPanel != null) clueInspectPanel.SetActive(true);
-        if (clueInspectText  != null) clueInspectText.text = text;
-        if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = false;
+        if (clueInspectPanel != null)
+        {
+            clueInspectPanel.SetActive(true);
+            EnsureClueCloseButton();
+        }
+        if (clueInspectText  != null)
+        {
+            clueInspectText.text = text;
+            clueInspectText.raycastTarget = false;
+        }
+        if (FirstPersonController.Instance != null)
+        {
+            FirstPersonController.Instance.MovementLocked = true;
+            FirstPersonController.Instance.MouseLocked = false;
+        }
+        WireButtons();
     }
 
     public void CloseClue()
     {
         if (clueInspectPanel != null) clueInspectPanel.SetActive(false);
-        if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = true;
+        if (FirstPersonController.Instance != null)
+        {
+            FirstPersonController.Instance.MovementLocked = false;
+            FirstPersonController.Instance.MouseLocked = true;
+        }
     }
 
     // ── Fuse Box (Stage 2: 3-Wire Discharge Yellow -> Blue -> Red) ───────────
@@ -473,15 +555,28 @@ public class PuzzleManager3D : MonoBehaviour
     {
         if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
 
-        if (fusePanelUI != null) fusePanelUI.SetActive(true);
-        if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = false;
+        if (fusePanelUI != null)
+        {
+            fusePanelUI.SetActive(true);
+            EnsureFuseCloseButton();
+        }
+        if (FirstPersonController.Instance != null)
+        {
+            FirstPersonController.Instance.MovementLocked = true;
+            FirstPersonController.Instance.MouseLocked = false;
+        }
         RefreshFuseButtonVisibility();
+        WireButtons();
     }
 
     public void CloseFuseBox()
     {
         if (fusePanelUI != null) fusePanelUI.SetActive(false);
-        if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = true;
+        if (FirstPersonController.Instance != null)
+        {
+            FirstPersonController.Instance.MovementLocked = false;
+            FirstPersonController.Instance.MouseLocked = true;
+        }
     }
 
     public void CutWire(string color)
@@ -489,33 +584,34 @@ public class PuzzleManager3D : MonoBehaviour
         if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlaySpark();
 
-        switch (color.ToLower())
+        string c = (color ?? "").ToLower().Trim();
+
+        if (c == "yellow" && _wireCutStep == 0)
         {
-            case "yellow" when _wireCutStep == 0:
-                if (wireYellow != null) wireYellow.SetActive(false);
-                _wireCutStep = 1;
-                SetStatus("Yellow (Ground) cut. Next: cut BLUE (Capacitor).");
-                RefreshFuseButtonVisibility();
-                break;
-
-            case "blue" when _wireCutStep == 1:
-                if (wireBlue != null) wireBlue.SetActive(false);
-                _wireCutStep = 2;
-                SetStatus("Blue (Capacitor) cut. Next: cut RED (Mag-Lock Release).");
-                RefreshFuseButtonVisibility();
-                break;
-
-            case "red" when _wireCutStep == 2:
-                if (wireRed != null) wireRed.SetActive(false);
-                _wireCutStep = 3;
-                CompleteWireStage();
-                break;
-
-            default:
-                SetStatus("ARC SURGE! Wires cut in wrong order! Water surged +4%.");
-                if (waterController != null) waterController.AddWaterSurge(0.04f);
-                ResetWires();
-                break;
+            _wireCutStep = 1;
+            if (wireYellow != null) wireYellow.SetActive(false);
+            SetStatus("<color=#FFCC00>YELLOW (Ground) cut [1/3].</color> Next: Cut BLUE (Capacitor).");
+            RefreshFuseButtonVisibility();
+        }
+        else if (c == "blue" && _wireCutStep == 1)
+        {
+            _wireCutStep = 2;
+            if (wireBlue != null) wireBlue.SetActive(false);
+            SetStatus("<color=#44AAFF>BLUE (Capacitor) cut [2/3].</color> Next: Cut RED (Mag-Lock Release).");
+            RefreshFuseButtonVisibility();
+        }
+        else if (c == "red" && _wireCutStep == 2)
+        {
+            _wireCutStep = 3;
+            if (wireRed != null) wireRed.SetActive(false);
+            SetStatus("<color=#4CFF88>MAG-LOCK RELEASED! [3/3]</color>");
+            CompleteWireStage();
+        }
+        else
+        {
+            SetStatus("<color=#FF4444>ARC SURGE! Wires cut in wrong order! Water surged +4%.</color>");
+            if (waterController != null) waterController.AddWaterSurge(0.04f);
+            ResetWires();
         }
     }
 
@@ -530,9 +626,13 @@ public class PuzzleManager3D : MonoBehaviour
 
     void RefreshFuseButtonVisibility()
     {
-        SetFuseBtnVisible("BtnRed",    wireRed    == null || wireRed.activeSelf);
-        SetFuseBtnVisible("BtnBlue",   wireBlue   == null || wireBlue.activeSelf);
-        SetFuseBtnVisible("BtnYellow", wireYellow == null || wireYellow.activeSelf);
+        SetFuseBtnVisible("BtnYellow", _wireCutStep == 0);
+        SetFuseBtnVisible("BtnBlue",   _wireCutStep < 2);
+        SetFuseBtnVisible("BtnRed",    _wireCutStep < 3);
+
+        if (wireYellow != null) wireYellow.SetActive(_wireCutStep == 0);
+        if (wireBlue   != null) wireBlue.SetActive(_wireCutStep < 2);
+        if (wireRed    != null) wireRed.SetActive(_wireCutStep < 3);
     }
 
     void SetFuseBtnVisible(string name, bool visible)
@@ -613,10 +713,29 @@ public class PuzzleManager3D : MonoBehaviour
     {
         if (CurrentStage != PuzzleStage.Stage4_EnterDoorCode) return;
 
-        if (keypadPanelUI != null) keypadPanelUI.SetActive(true);
+        if (keypadPanelUI != null)
+        {
+            keypadPanelUI.SetActive(true);
+            EnsureKeypadCloseButton();
+        }
         _keypadInput = "";
         RefreshKeypadDisplay();
-        if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = false;
+        if (FirstPersonController.Instance != null)
+        {
+            FirstPersonController.Instance.MovementLocked = true;
+            FirstPersonController.Instance.MouseLocked = false;
+        }
+        WireButtons();
+    }
+
+    public void CloseKeypad()
+    {
+        if (keypadPanelUI != null) keypadPanelUI.SetActive(false);
+        if (FirstPersonController.Instance != null)
+        {
+            FirstPersonController.Instance.MovementLocked = false;
+            FirstPersonController.Instance.MouseLocked = true;
+        }
     }
 
     public void KeypadPress(string digit)
@@ -630,7 +749,11 @@ public class PuzzleManager3D : MonoBehaviour
 
     void RefreshKeypadDisplay()
     {
-        if (keypadDisplay != null) keypadDisplay.text = _keypadInput.PadRight(4, '_');
+        if (keypadDisplay != null)
+        {
+            keypadDisplay.text = _keypadInput.PadRight(4, '_');
+            keypadDisplay.raycastTarget = false;
+        }
     }
 
     void CheckCode()
@@ -642,8 +765,7 @@ public class PuzzleManager3D : MonoBehaviour
             CurrentStage = PuzzleStage.Stage5_DoorUnlocked;
             SetStatus("ACCESS GRANTED — 15-SECOND HYDRAULIC OVERRIDE INITIATED");
 
-            if (keypadPanelUI != null) keypadPanelUI.SetActive(false);
-            if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = true;
+            CloseKeypad();
 
             UnlockLight(lockLight3, 3, isFinalDoor: true);
 
@@ -726,15 +848,21 @@ public class PuzzleManager3D : MonoBehaviour
     {
         CloseFuseBox();
         CloseClue();
-        if (keypadPanelUI != null) keypadPanelUI.SetActive(false);
+        CloseKeypad();
         EndValveHold();
-        if (FirstPersonController.Instance != null) FirstPersonController.Instance.MouseLocked = true;
+        if (FirstPersonController.Instance != null)
+        {
+            FirstPersonController.Instance.MovementLocked = false;
+            FirstPersonController.Instance.MouseLocked = true;
+        }
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
 
     void Update()
     {
+        UpdatePanelDirectClicksAndShortcuts();
+
         if (!_valveHolding || !_holdingCorrectValve || CurrentStage != PuzzleStage.Stage3_TurnPipeValve) return;
 
         _gaugeProgress += Time.deltaTime * 0.32f; // ~3.1 seconds to fill from 0 to 1
@@ -773,6 +901,138 @@ public class PuzzleManager3D : MonoBehaviour
         }
     }
 
+    void UpdatePanelDirectClicksAndShortcuts()
+    {
+        // ── 1. Fuse Panel ───────────────────────────────────────────────────
+        if (fusePanelUI != null && fusePanelUI.activeSelf)
+        {
+            // Direct mouse click check
+            if (Input.GetMouseButtonDown(0))
+            {
+                Vector2 mPos = Input.mousePosition;
+                if (_btnCloseFuse != null && _btnCloseFuse.gameObject.activeInHierarchy &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_btnCloseFuse.GetComponent<RectTransform>(), mPos, null))
+                {
+                    CloseFuseBox();
+                    return;
+                }
+                if (_btnYellow != null && _btnYellow.gameObject.activeInHierarchy &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_btnYellow.GetComponent<RectTransform>(), mPos, null))
+                {
+                    CutWire("yellow");
+                    return;
+                }
+                if (_btnBlue != null && _btnBlue.gameObject.activeInHierarchy &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_btnBlue.GetComponent<RectTransform>(), mPos, null))
+                {
+                    CutWire("blue");
+                    return;
+                }
+                if (_btnRed != null && _btnRed.gameObject.activeInHierarchy &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_btnRed.GetComponent<RectTransform>(), mPos, null))
+                {
+                    CutWire("red");
+                    return;
+                }
+            }
+
+            // Keyboard shortcuts
+            if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1) || Input.GetKeyDown(KeyCode.Y))
+            {
+                CutWire("yellow");
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2) || Input.GetKeyDown(KeyCode.B))
+            {
+                CutWire("blue");
+            }
+            else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3) || Input.GetKeyDown(KeyCode.R))
+            {
+                CutWire("red");
+            }
+            else if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.E))
+            {
+                CloseFuseBox();
+            }
+            return;
+        }
+
+        // ── 2. Clue Panel ───────────────────────────────────────────────────
+        if (clueInspectPanel != null && clueInspectPanel.activeSelf)
+        {
+            // Direct mouse click check
+            if (Input.GetMouseButtonDown(0))
+            {
+                Vector2 mPos = Input.mousePosition;
+                if (_btnCloseClue != null && _btnCloseClue.gameObject.activeInHierarchy &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_btnCloseClue.GetComponent<RectTransform>(), mPos, null))
+                {
+                    CloseClue();
+                    return;
+                }
+            }
+
+            // Keyboard shortcuts
+            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.C) ||
+                Input.GetKeyDown(KeyCode.E) || Input.GetKeyDown(KeyCode.Space))
+            {
+                CloseClue();
+            }
+            return;
+        }
+
+        // ── 3. Keypad Panel ─────────────────────────────────────────────────
+        if (keypadPanelUI != null && keypadPanelUI.activeSelf)
+        {
+            // Direct mouse click check
+            if (Input.GetMouseButtonDown(0))
+            {
+                Vector2 mPos = Input.mousePosition;
+                if (_btnCloseKeypad != null && _btnCloseKeypad.gameObject.activeInHierarchy &&
+                    RectTransformUtility.RectangleContainsScreenPoint(_btnCloseKeypad.GetComponent<RectTransform>(), mPos, null))
+                {
+                    CloseKeypad();
+                    return;
+                }
+
+                // Check keypad digit buttons directly
+                foreach (string d in new[]{"7","8","9","4","5","6","1","2","3","Clear","0","Enter"})
+                {
+                    var btn = FindChild(keypadPanelUI.transform, "Key_" + d)?.GetComponent<Button>();
+                    if (btn != null && btn.gameObject.activeInHierarchy &&
+                        RectTransformUtility.RectangleContainsScreenPoint(btn.GetComponent<RectTransform>(), mPos, null))
+                    {
+                        KeypadPress(d);
+                        return;
+                    }
+                }
+            }
+
+            // Keyboard input for digits 0-9
+            for (int i = 0; i <= 9; i++)
+            {
+                if (Input.GetKeyDown(KeyCode.Alpha0 + i) || Input.GetKeyDown(KeyCode.Keypad0 + i))
+                {
+                    KeypadPress(i.ToString());
+                    return;
+                }
+            }
+
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+            {
+                KeypadPress("Enter");
+            }
+            else if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.Delete))
+            {
+                KeypadPress("Clear");
+            }
+            else if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.C))
+            {
+                CloseKeypad();
+            }
+            return;
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     void SetStatus(string msg)
@@ -783,8 +1043,155 @@ public class PuzzleManager3D : MonoBehaviour
 
     public void SetObjective(string text) => DialogueManager.Instance?.SetObjective(text);
 
+    void EnsureEventSystemInputModule()
+    {
+        var es = UnityEngine.EventSystems.EventSystem.current;
+        if (es == null)
+        {
+            var esObj = GameObject.Find("EventSystem");
+            if (esObj != null) es = esObj.GetComponent<UnityEngine.EventSystems.EventSystem>();
+        }
+        if (es != null)
+        {
+            // Add InputSystemUIInputModule if Unity.InputSystem is present in runtime
+            var inputModuleType = System.Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
+            if (inputModuleType != null && es.GetComponent(inputModuleType) == null)
+            {
+                es.gameObject.AddComponent(inputModuleType);
+            }
+        }
+    }
+
+    void EnsureFuseCloseButton()
+    {
+        if (fusePanelUI == null) return;
+        var btnT = FindChild(fusePanelUI.transform, "CloseFuse");
+        if (btnT == null)
+        {
+            _btnCloseFuse = CreatePanelButton(fusePanelUI.transform, "CloseFuse", "[ X ] CLOSE (ESC)",
+                new Vector2(0.5f, 0.1f), Vector2.zero, new Vector2(180, 44), CloseFuseBox);
+        }
+        else
+        {
+            _btnCloseFuse = btnT.GetComponent<Button>();
+            if (_btnCloseFuse != null)
+            {
+                FixButtonRaycasts(_btnCloseFuse);
+                _btnCloseFuse.onClick.RemoveAllListeners();
+                _btnCloseFuse.onClick.AddListener(CloseFuseBox);
+            }
+            var txt = btnT.GetComponentInChildren<Text>(true);
+            if (txt != null) { txt.text = "[ X ] CLOSE (ESC)"; txt.raycastTarget = false; }
+            var tmp = btnT.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (tmp != null) { tmp.text = "[ X ] CLOSE (ESC)"; tmp.raycastTarget = false; }
+            btnT.gameObject.SetActive(true);
+        }
+    }
+
+    void EnsureClueCloseButton()
+    {
+        if (clueInspectPanel == null) return;
+        var btnT = FindChild(clueInspectPanel.transform, "CloseClue");
+        if (btnT == null)
+        {
+            _btnCloseClue = CreatePanelButton(clueInspectPanel.transform, "CloseClue", "[ X ] CLOSE (ESC)",
+                new Vector2(0.5f, 0.1f), Vector2.zero, new Vector2(180, 44), CloseClue);
+        }
+        else
+        {
+            _btnCloseClue = btnT.GetComponent<Button>();
+            if (_btnCloseClue != null)
+            {
+                FixButtonRaycasts(_btnCloseClue);
+                _btnCloseClue.onClick.RemoveAllListeners();
+                _btnCloseClue.onClick.AddListener(CloseClue);
+            }
+            var txt = btnT.GetComponentInChildren<Text>(true);
+            if (txt != null) { txt.text = "[ X ] CLOSE (ESC)"; txt.raycastTarget = false; }
+            var tmp = btnT.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (tmp != null) { tmp.text = "[ X ] CLOSE (ESC)"; tmp.raycastTarget = false; }
+            btnT.gameObject.SetActive(true);
+        }
+    }
+
+    void EnsureKeypadCloseButton()
+    {
+        if (keypadPanelUI == null) return;
+        var btnT = FindChild(keypadPanelUI.transform, "CloseKeypad");
+        if (btnT == null)
+        {
+            _btnCloseKeypad = CreatePanelButton(keypadPanelUI.transform, "CloseKeypad", "[ X ] CLOSE (ESC)",
+                new Vector2(0.5f, 0.08f), Vector2.zero, new Vector2(200, 40), CloseKeypad);
+        }
+        else
+        {
+            _btnCloseKeypad = btnT.GetComponent<Button>();
+            if (_btnCloseKeypad != null)
+            {
+                FixButtonRaycasts(_btnCloseKeypad);
+                _btnCloseKeypad.onClick.RemoveAllListeners();
+                _btnCloseKeypad.onClick.AddListener(CloseKeypad);
+            }
+            btnT.gameObject.SetActive(true);
+        }
+    }
+
+    void FixButtonRaycasts(Button btn)
+    {
+        if (btn == null) return;
+        var img = btn.GetComponent<Image>();
+        if (img != null) img.raycastTarget = true;
+        foreach (var t in btn.GetComponentsInChildren<Text>(true)) t.raycastTarget = false;
+        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) tmp.raycastTarget = false;
+    }
+
+    Button CreatePanelButton(Transform parent, string name, string label, Vector2 anchor, Vector2 anchoredPos, Vector2 size, UnityEngine.Events.UnityAction action)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = anchor;
+        rt.anchorMax = anchor;
+        rt.pivot = anchor;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = size;
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.18f, 0.2f, 0.26f, 0.95f);
+        img.raycastTarget = true;
+
+        var btn = go.GetComponent<Button>();
+        var colors = btn.colors;
+        colors.normalColor = new Color(0.18f, 0.2f, 0.26f, 0.95f);
+        colors.highlightedColor = new Color(0.35f, 0.4f, 0.5f, 1f);
+        colors.pressedColor = new Color(0.12f, 0.14f, 0.18f, 1f);
+        btn.colors = colors;
+        btn.onClick.AddListener(action);
+
+        var textGO = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+        textGO.transform.SetParent(go.transform, false);
+        var trt = textGO.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = Vector2.zero;
+        trt.offsetMax = Vector2.zero;
+
+        var tmp = textGO.GetComponent<TextMeshProUGUI>();
+        tmp.text = label;
+        tmp.fontSize = 16;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.color = new Color(0.95f, 0.95f, 0.95f, 1f);
+        tmp.raycastTarget = false;
+
+        return btn;
+    }
+
     void WireButtons()
     {
+        EnsureKeypadCloseButton();
+        EnsureFuseCloseButton();
+        EnsureClueCloseButton();
+
         // Keypad
         if (keypadPanelUI != null)
         {
@@ -792,30 +1199,45 @@ public class PuzzleManager3D : MonoBehaviour
             {
                 var btn = FindChild(keypadPanelUI.transform, "Key_" + d)?.GetComponent<Button>();
                 if (btn == null) continue;
+                FixButtonRaycasts(btn);
                 btn.onClick.RemoveAllListeners();
                 string cap = d;
                 btn.onClick.AddListener(() => KeypadPress(cap));
             }
+
+            _btnCloseKeypad = FindChild(keypadPanelUI.transform, "CloseKeypad")?.GetComponent<Button>();
+            if (_btnCloseKeypad != null)
+            {
+                FixButtonRaycasts(_btnCloseKeypad);
+                _btnCloseKeypad.onClick.RemoveAllListeners();
+                _btnCloseKeypad.onClick.AddListener(CloseKeypad);
+            }
         }
+
         // Fuse
         if (fusePanelUI != null)
         {
-            WireBtn(fusePanelUI, "BtnRed",    () => CutWire("red"));
-            WireBtn(fusePanelUI, "BtnBlue",   () => CutWire("blue"));
-            WireBtn(fusePanelUI, "BtnYellow", () => CutWire("yellow"));
-            WireBtn(fusePanelUI, "CloseFuse", CloseFuseBox);
+            _btnRed = WireBtn(fusePanelUI, "BtnRed", () => CutWire("red"));
+            _btnBlue = WireBtn(fusePanelUI, "BtnBlue", () => CutWire("blue"));
+            _btnYellow = WireBtn(fusePanelUI, "BtnYellow", () => CutWire("yellow"));
+            _btnCloseFuse = WireBtn(fusePanelUI, "CloseFuse", CloseFuseBox);
         }
+
         // Clue close
         if (clueInspectPanel != null)
-            WireBtn(clueInspectPanel, "CloseClue", CloseClue);
+        {
+            _btnCloseClue = WireBtn(clueInspectPanel, "CloseClue", CloseClue);
+        }
     }
 
-    void WireBtn(GameObject panel, string childName, UnityEngine.Events.UnityAction action)
+    Button WireBtn(GameObject panel, string childName, UnityEngine.Events.UnityAction action)
     {
         var btn = FindChild(panel?.transform, childName)?.GetComponent<Button>();
-        if (btn == null) return;
+        if (btn == null) return null;
+        FixButtonRaycasts(btn);
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(action);
+        return btn;
     }
 
     static Transform FindChild(Transform parent, string name)

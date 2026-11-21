@@ -51,6 +51,10 @@ public class RadioSystem : MonoBehaviour
         }
     }
 
+    Button _btnClose;
+    Button _btnMinus;
+    Button _btnPlus;
+
     void Start()
     {
         // Load voice acting audio clips to preserve character dialogues
@@ -115,8 +119,33 @@ public class RadioSystem : MonoBehaviour
         HandleInputTuning();
         HandleLockOnMechanic();
 
-        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab))
+        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.C))
             ClosePanel();
+
+        // Direct screen-point click fallback so UI buttons work 100% reliably
+        if (Input.GetMouseButtonDown(0))
+        {
+            Vector2 mPos = Input.mousePosition;
+            if (_btnClose != null && _btnClose.gameObject.activeInHierarchy &&
+                RectTransformUtility.RectangleContainsScreenPoint(_btnClose.GetComponent<RectTransform>(), mPos, null))
+            {
+                ClosePanel();
+            }
+            else if (_btnMinus != null && _btnMinus.gameObject.activeInHierarchy &&
+                RectTransformUtility.RectangleContainsScreenPoint(_btnMinus.GetComponent<RectTransform>(), mPos, null))
+            {
+                float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
+                _freq = Mathf.Clamp(_freq - step, minFreq, maxFreq);
+                OnFrequencyChangedByUser();
+            }
+            else if (_btnPlus != null && _btnPlus.gameObject.activeInHierarchy &&
+                RectTransformUtility.RectangleContainsScreenPoint(_btnPlus.GetComponent<RectTransform>(), mPos, null))
+            {
+                float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
+                _freq = Mathf.Clamp(_freq + step, minFreq, maxFreq);
+                OnFrequencyChangedByUser();
+            }
+        }
 
         UpdateStatic();
         CheckFreq();
@@ -226,6 +255,9 @@ public class RadioSystem : MonoBehaviour
 
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlaySignalLockedConfirmation();
+
+                // Immediately unlock Stage 2 so Fuse Box is ready without delay
+                PuzzleManager3D.Instance?.OnRadioStage2Ready();
 
                 StartCoroutine(PlayBackup());
             }
@@ -440,14 +472,14 @@ public class RadioSystem : MonoBehaviour
         });
 
         // 2. Step Buttons: [-] and [+]
-        CreateButton(root.transform, "BtnMinus", "◄ -0.1 FM", new Vector2(-260f, -65f), new Vector2(100f, 32f), font, () =>
+        _btnMinus = CreateButton(root.transform, "BtnMinus", "◄ -0.1 FM", new Vector2(-260f, -65f), new Vector2(100f, 32f), font, () =>
         {
             float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
             _freq = Mathf.Clamp(_freq - step, minFreq, maxFreq);
             OnFrequencyChangedByUser();
         });
 
-        CreateButton(root.transform, "BtnPlus", "+0.1 FM ►", new Vector2(260f, -65f), new Vector2(100f, 32f), font, () =>
+        _btnPlus = CreateButton(root.transform, "BtnPlus", "+0.1 FM ►", new Vector2(260f, -65f), new Vector2(100f, 32f), font, () =>
         {
             float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
             _freq = Mathf.Clamp(_freq + step, minFreq, maxFreq);
@@ -455,7 +487,7 @@ public class RadioSystem : MonoBehaviour
         });
 
         // 3. Close Button
-        CreateButton(root.transform, "BtnClose", "[ X ] CLOSE (ESC)", new Vector2(0f, -180f), new Vector2(200f, 36f), font, ClosePanel);
+        _btnClose = CreateButton(root.transform, "BtnClose", "[ X ] CLOSE (ESC)", new Vector2(0f, -180f), new Vector2(200f, 36f), font, ClosePanel);
 
         // 4. Lock Status Text
         var lockTxtGO = new GameObject("LockStatusText", typeof(RectTransform), typeof(Text));
@@ -524,7 +556,7 @@ public class RadioSystem : MonoBehaviour
         _instructionsText.text = "A / D or ◄ / ► to Tune  (Hold SHIFT: Fine Tune)  |  Mouse Wheel  |  Drag Slider";
     }
 
-    void CreateButton(Transform parent, string name, string label, Vector2 anchoredPos, Vector2 size, Font font, UnityEngine.Events.UnityAction action)
+    Button CreateButton(Transform parent, string name, string label, Vector2 anchoredPos, Vector2 size, Font font, UnityEngine.Events.UnityAction action)
     {
         var btnGO = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
         btnGO.transform.SetParent(parent, false);
@@ -537,6 +569,7 @@ public class RadioSystem : MonoBehaviour
         var img = btnGO.GetComponent<Image>();
         img.color = new Color(0.2f, 0.22f, 0.28f, 0.9f);
         img.sprite = WhiteSprite;
+        img.raycastTarget = true;
 
         var btn = btnGO.GetComponent<Button>();
         var colors = btn.colors;
@@ -558,5 +591,8 @@ public class RadioSystem : MonoBehaviour
         txt.alignment = TextAnchor.MiddleCenter;
         txt.color = new Color(0.95f, 0.95f, 0.95f, 1f);
         txt.text = label;
+        txt.raycastTarget = false; // Never block click on parent Button
+
+        return btn;
     }
 }
