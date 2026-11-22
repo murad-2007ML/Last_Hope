@@ -33,6 +33,11 @@ public class PuzzleManager3D : MonoBehaviour
     [SerializeField] GameObject wireBlue;
     [SerializeField] GameObject wireYellow;
     [SerializeField] WaterController3D waterController;
+    bool _note1Read;
+    bool _note2Read;
+    bool _note3Read;
+
+    public bool CanTuneBackupFrequency => _note1Read && _note2Read;
 
     [Header("Lock Lights")]
     [SerializeField] GameObject lockLight1;
@@ -602,7 +607,7 @@ public class PuzzleManager3D : MonoBehaviour
         ShowClue("[You inspect the waterlogged photo floating on the surface]\n\nFaded ink on the back:\n\n\"03 / ?? — Look at the stopped clock's minute hand for the day we were trapped.\"\n\n(Minute hand is at 15)");
     }
 
-    public void InspectClue(int i)
+    /*public void InspectClue(int i)
     {
         if (i == 0 && CurrentStage < PuzzleStage.Stage1_TuneBackupFrequency) return;
         if (i == 1 && CurrentStage < PuzzleStage.Stage1_TuneBackupFrequency) return;
@@ -614,8 +619,24 @@ public class PuzzleManager3D : MonoBehaviour
             "MAG-LOCK BYPASS PROTOCOL:\n\nCheck wall clock.\nIf the hour is ODD, discharge in sequence:\n1. YELLOW (Ground)\n2. BLUE (Capacitor)\n3. RED (Mag-Lock Release)\n\nWARNING: Cutting RED before discharging Yellow & Blue causes an arc surge!"
         };
         if (i >= 0 && i < notes.Length) ShowClue(notes[i]);
-    }
+    }*/
+    public void InspectClue(int i)
+    {
+        if (i == 0 && CurrentStage < PuzzleStage.Stage1_TuneBackupFrequency) return;
+        if (i == 1 && CurrentStage < PuzzleStage.Stage1_TuneBackupFrequency) return;
+        if (i == 2 && CurrentStage < PuzzleStage.Stage2_CutWires) return;
 
+        if (i == 0) _note1Read = true;
+        if (i == 1) _note2Read = true;
+        if (i == 2) _note3Read = true;
+
+        string[] notes = {
+            "EMERGENCY RELAY LOG:\n\nBase Frequency = 102.0 MHz.\n\nApply the Sector B Receiver Offset written on Note #2.",
+            "SECTOR B MAINTENANCE NOTE:\n\nReceiver Drift Offset = -3.6 MHz.\n\n(Target Relay Frequency = Base Frequency + Offset)",
+            "MAG-LOCK BYPASS PROTOCOL:\n\nCheck wall clock.\nIf the hour is ODD, discharge in sequence:\n1. YELLOW (Ground)\n2. BLUE (Capacitor)\n3. RED (Mag-Lock Release)\n\nWARNING: Cutting RED before discharging Yellow & Blue causes an arc surge!"
+        };
+        if (i >= 0 && i < notes.Length) ShowClue(notes[i]);
+    }
     void ShowClue(string text)
     {
         if (clueInspectPanel != null)
@@ -648,9 +669,30 @@ public class PuzzleManager3D : MonoBehaviour
 
     // ── Fuse Box (Stage 2: 3-Wire Discharge Yellow -> Blue -> Red) ───────────
 
+    /*public void OpenFuseBox()
+    {
+        if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
+
+        if (!_fuseBoxDoorOpened)
+        {
+            _fuseBoxDoorOpened = true;
+            StartCoroutine(OpenFuseBoxSequence());
+        }
+        else
+        {
+            ShowFusePanel();
+        }
+    }*/
+
     public void OpenFuseBox()
     {
         if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
+
+        if (!_note3Read)
+        {
+            SetStatus("<color=#FFAA00>You must read Note #3 before touching the fuse box!</color>");
+            return;
+        }
 
         if (!_fuseBoxDoorOpened)
         {
@@ -699,7 +741,16 @@ public class PuzzleManager3D : MonoBehaviour
 
     public void CutWire(string color)
     {
+        // if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
+        // if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlaySpark();
         if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
+
+        if (!_note3Read)
+        {
+            SetStatus("<color=#FFAA00>Read Note #3 first to learn the discharge order!</color>");
+            return;
+        }
+
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlaySpark();
 
         string c = (color ?? "").ToLower().Trim();
