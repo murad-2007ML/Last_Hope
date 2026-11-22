@@ -21,16 +21,6 @@ public class WakeUpIntro : MonoBehaviour
     float _origVignetteIntensity = 0.25f;
     Vector3 _initialCamLocalRotEuler;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    static void AutoInit()
-    {
-        if (Instance == null && FindAnyObjectByType<WakeUpIntro>() == null)
-        {
-            var go = new GameObject("WakeUpIntro_Controller");
-            go.AddComponent<WakeUpIntro>();
-        }
-    }
-
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -258,7 +248,7 @@ public class WakeUpIntro : MonoBehaviour
         if (DialogueManager.Instance != null)
         {
             DialogueManager.Instance.SpeakMurad(
-                "You're finally awake... My leg is pinned under this concrete, I can't move. Check the radio on the table!",
+                "You're awake... My leg is trapped under this concrete. Turn on your flashlight—check the radio!",
                 null); // Clip already playing spatially
         }
     }
@@ -283,5 +273,12 @@ public class WakeUpIntro : MonoBehaviour
                 return;
             }
         }
+    }
+    IEnumerator SpeakMuradLineCoroutine()
+    {
+        yield return new WaitForSeconds(0.6f);
+            DialogueManager.Instance.SpeakMurad(
+                "You're awake... My leg is trapped under this concrete. Turn on your flashlight—check the radio!",
+                null); 
     }
 }

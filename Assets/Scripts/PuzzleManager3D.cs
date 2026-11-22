@@ -424,7 +424,7 @@ public class PuzzleManager3D : MonoBehaviour
             ProceduralAudio.Instance.PlaySteamRelease();
 
         radioSystem?.OnValveComplete();
-        SetObjective("Combine the clues (sun board & photo) — deduce the 4-digit code and enter on keypad");
+        SetObjective("Combine the clues (sun board & clock) — deduce the 4-digit code and enter on keypad");
     }
 
     // ── Lock lights ───────────────────────────────────────────────────────────
@@ -985,32 +985,10 @@ public class PuzzleManager3D : MonoBehaviour
             return;
         }
 
-        // ── 3. Keypad Panel ─────────────────────────────────────────────────
         if (keypadPanelUI != null && keypadPanelUI.activeSelf)
         {
-            // Direct mouse click check
-            if (Input.GetMouseButtonDown(0))
-            {
-                Vector2 mPos = Input.mousePosition;
-                if (_btnCloseKeypad != null && _btnCloseKeypad.gameObject.activeInHierarchy &&
-                    RectTransformUtility.RectangleContainsScreenPoint(_btnCloseKeypad.GetComponent<RectTransform>(), mPos, null))
-                {
-                    CloseKeypad();
-                    return;
-                }
-
-                // Check keypad digit buttons directly
-                foreach (string d in new[]{"7","8","9","4","5","6","1","2","3","Clear","0","Enter"})
-                {
-                    var btn = FindChild(keypadPanelUI.transform, "Key_" + d)?.GetComponent<Button>();
-                    if (btn != null && btn.gameObject.activeInHierarchy &&
-                        RectTransformUtility.RectangleContainsScreenPoint(btn.GetComponent<RectTransform>(), mPos, null))
-                    {
-                        KeypadPress(d);
-                        return;
-                    }
-                }
-            }
+            // UI Button klikləri WireButtons() -> onClick ilə idarə olunur;
+            // burada təkrar Input.GetMouseButtonDown yoxlaması 2 dəfə yazmağa səbəb olur.
 
             // Keyboard input for digits 0-9
             for (int i = 0; i <= 9; i++)
@@ -1037,7 +1015,6 @@ public class PuzzleManager3D : MonoBehaviour
             return;
         }
     }
-
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     void SetStatus(string msg)

@@ -418,7 +418,7 @@ public class DialogueManager : MonoBehaviour
         }
 
         // Reveal speed across audioClip.length * 0.9f
-        float revealDuration = (clip != null && clip.length > 0.1f)
+        /*float revealDuration = (clip != null && clip.length > 0.1f)
             ? (clip.length * 0.9f)
             : Mathf.Max(0.5f, totalChars * 0.035f);
 
@@ -441,6 +441,52 @@ public class DialogueManager : MonoBehaviour
         float holdRemaining = targetTotalDuration - revealDuration;
         if (holdRemaining > 0f)
             yield return new WaitForSeconds(holdRemaining);
+
+        SetSubtitleRaw("");
+        if (subtitlePanel != null) subtitlePanel.SetActive(false);
+        _typeCoroutine = null;
+        onDone?.Invoke();*/
+        float clipLen = (clip != null) ? clip.length : 0f;
+
+        // Mətnin açılma müddəti: audio varsa audionun ~85%-i ərzində bitsin
+        float revealDuration = (clipLen > 0.1f)
+            ? (clipLen * 0.85f)
+            : Mathf.Max(0.5f, totalChars * 0.035f);
+
+        float charDelay = totalChars > 0 ? (revealDuration / totalChars) : 0.035f;
+        int blipEvery = isRescuer ? 4 : 6;
+
+        for (int i = 1; i <= totalChars; i++)
+        {
+            subtitleText.maxVisibleCharacters = i;
+            if (i % blipEvery == 0 && ProceduralAudio.Instance != null)
+            {
+                if (isRescuer) ProceduralAudio.Instance.PlayRadioBlip();
+                else           ProceduralAudio.Instance.PlayWhisperTone();
+            }
+            yield return new WaitForSeconds(charDelay);
+        }
+
+        // Audio varsa, tam bitənə qədər gözlə (təhlükəsizlik limiti ilə)
+        if (clip != null && voiceSource != null && clipLen > 0f)
+        {
+            float elapsed = revealDuration;
+            float safetyLimit = clipLen + 1.0f;
+            while (voiceSource.isPlaying && elapsed < safetyLimit)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            // Audio bitəndən sonra oxumaq üçün kiçik pauza
+            yield return new WaitForSeconds(0.6f);
+        }
+        else
+        {
+            // Audio yoxdursa, mətn uzunluğuna görə minimum vaxt saxla
+            float fallbackHold = Mathf.Max(2.5f, totalChars * 0.045f);
+            yield return new WaitForSeconds(fallbackHold);
+        }
 
         SetSubtitleRaw("");
         if (subtitlePanel != null) subtitlePanel.SetActive(false);

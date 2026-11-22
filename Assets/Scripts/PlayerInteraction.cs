@@ -67,7 +67,7 @@ public class PlayerInteraction : MonoBehaviour
                     t.gameObject.layer = 0;
 
                 // If it has a MeshRenderer or is named Vintage_Radio, ensure an active Collider exists
-                if (t.GetComponent<Collider>() == null && (t.GetComponent<MeshRenderer>() != null || isRadio))
+                /*if (t.GetComponent<Collider>() == null && (t.GetComponent<MeshRenderer>() != null || isRadio))
                 {
                     var col = t.gameObject.AddComponent<BoxCollider>();
                     var mr = t.GetComponent<MeshRenderer>();
@@ -76,7 +76,7 @@ public class PlayerInteraction : MonoBehaviour
                         col.center = t.InverseTransformPoint(mr.bounds.center);
                         col.size = mr.bounds.size;
                     }
-                }
+                }*/
             }
         }
     }

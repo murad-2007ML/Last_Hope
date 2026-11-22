@@ -14,6 +14,11 @@ public class RadioSystem : MonoBehaviour
     [SerializeField] AudioSource staticSource;
     [SerializeField] GameObject  radioPanel;
 
+    [Header("Manual UI Buttons (Optional)")]
+    [SerializeField] Button minusButton;
+    [SerializeField] Button plusButton;
+    [SerializeField] Button closeButton;
+
     const float FREQ_BROKEN  = 104.5f;
     const float FREQ_BACKUP  = 98.4f;
     const float TUNE_THRESH  = 0.25f;
@@ -82,7 +87,7 @@ public class RadioSystem : MonoBehaviour
 
         _panelOpen = true;
         if (radioPanel != null) radioPanel.SetActive(true);
-
+        WireManualButtons();
         // Pause FirstPersonController movement and look, unlock cursor
         if (FirstPersonController.Instance != null)
             FirstPersonController.Instance.MouseLocked = false;
@@ -379,6 +384,41 @@ public class RadioSystem : MonoBehaviour
             frequencyDisplay.text = _freq.ToString("F1") + " FM";
     }
 
+    void StepDown()
+    {
+        float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
+        _freq = Mathf.Clamp(_freq - step, minFreq, maxFreq);
+        OnFrequencyChangedByUser();
+    }
+
+    void StepUp()
+    {
+        float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
+        _freq = Mathf.Clamp(_freq + step, minFreq, maxFreq);
+        OnFrequencyChangedByUser();
+    }
+    void WireManualButtons()
+    {
+        if (minusButton != null)
+        {
+            _btnMinus = minusButton;
+            _btnMinus.onClick.RemoveAllListeners();
+            _btnMinus.onClick.AddListener(StepDown);
+        }
+        if (plusButton != null)
+        {
+            _btnPlus = plusButton;
+            _btnPlus.onClick.RemoveAllListeners();
+            _btnPlus.onClick.AddListener(StepUp);
+        }
+        if (closeButton != null)
+        {
+            _btnClose = closeButton;
+            _btnClose.onClick.RemoveAllListeners();
+            _btnClose.onClick.AddListener(ClosePanel);
+        }
+    }
+
     // ── Dynamic UI Builder ───────────────────────────────────────────────────
 
     void BuildRadioUIIfNeeded()
@@ -489,7 +529,7 @@ public class RadioSystem : MonoBehaviour
         });
 
         // 3. Close Button
-        _btnClose = CreateButton(root.transform, "BtnClose", "[ X ] CLOSE (ESC)", new Vector2(0f, -180f), new Vector2(200f, 36f), font, ClosePanel);
+        _btnClose = CreateButton(root.transform, "BtnClose", "CLOSE (ESC)", new Vector2(0f, -180f), new Vector2(200f, 36f), font, ClosePanel);
 
         // 4. Lock Status Text
         var lockTxtGO = new GameObject("LockStatusText", typeof(RectTransform), typeof(Text));
