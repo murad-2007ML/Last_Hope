@@ -12,6 +12,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class DoorVoidEnding : MonoBehaviour
 {

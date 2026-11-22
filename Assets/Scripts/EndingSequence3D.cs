@@ -2,7 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-
+using UnityEngine.SceneManagement;
 public class EndingSequence3D : MonoBehaviour
 {
     [SerializeField] Transform exitDoor;
@@ -13,10 +13,13 @@ public class EndingSequence3D : MonoBehaviour
     [SerializeField] FirstPersonController fpsController;
 
     [Header("UI")]
+    [SerializeField] GameObject missionObjectiveUI;
     [SerializeField] Image whiteFlash;
     [SerializeField] Image blackFade;
     [SerializeField] TextMeshProUGUI creditsText;
     [SerializeField] TextMeshProUGUI endingSubtitle;
+    [SerializeField] int mainMenuSceneIndex = 0;
+    [SerializeField] float returnToMenuDelay = 2.0f;
 
     bool _triggered;
     AudioClip _clipEnding;
@@ -84,23 +87,16 @@ public class EndingSequence3D : MonoBehaviour
             creditsText.gameObject.SetActive(true);
             creditsText.text = GetCreditsText();
         }
-        yield break;
+
+        yield return StartCoroutine(ReturnToMainMenuAfterDelay());
     }
 
     string GetCreditsText() =>
-        "<b>THE LAST HOPE</b>\n\n" +
-        "\"Can You Hear Me?\"\n\n" +
-        "─────────────────────────────────────────\n\n" +
-        "Isolation can make us hear voices we need to hear.\n" +
-        "Trauma can make us see people who protect us — even if they were never there.\n\n" +
-        "If you are struggling alone, please reach out.\n\n" +
-        "<b>Mental Health Support:</b>\n" +
-        "Crisis Text Line: Text HOME to 741741\n" +
-        "International Association for Suicide Prevention: https://www.iasp.info/resources/Crisis_Centres/\n\n" +
-        "You are not alone.";
+        "<b>TO BE CONTINUED...</b>\n\n";
 
     IEnumerator EndingRoutine()
     {
+        missionObjectiveUI.SetActive(false);
         // Stop water and lock player
         if (waterController != null) waterController.Rising = false;
         if (fpsController != null) fpsController.MouseLocked = false;
@@ -149,7 +145,7 @@ public class EndingSequence3D : MonoBehaviour
 
         // Fade to black
         yield return StartCoroutine(FadeToBlack());
-
+        missionObjectiveUI.SetActive(false);
         // Show credits
         SetSubtitle("");
         if (creditsText != null)
@@ -157,6 +153,18 @@ public class EndingSequence3D : MonoBehaviour
             creditsText.gameObject.SetActive(true);
             creditsText.text = GetCreditsText();
         }
+
+        yield return StartCoroutine(ReturnToMainMenuAfterDelay());
+    }
+    IEnumerator ReturnToMainMenuAfterDelay()
+    {
+        yield return new WaitForSeconds(returnToMenuDelay);
+
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        SceneManager.LoadScene(mainMenuSceneIndex);
     }
 
     IEnumerator OpenDoor()
