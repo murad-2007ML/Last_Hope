@@ -8,6 +8,7 @@ public class PanicAttack3D : MonoBehaviour
 {
     [SerializeField] Volume urpVolume;
     [SerializeField] Slider breathSlider;
+    [SerializeField] GameObject breathPanel; // Assign the WHOLE breath UI panel here (parent of BREATHE text + slider)
     [SerializeField] Transform cameraTransform;
     [SerializeField] float panicIntervalMin = 95f;
     [SerializeField] float panicIntervalMax = 95f;
@@ -35,7 +36,7 @@ public class PanicAttack3D : MonoBehaviour
             urpVolume.profile.TryGet(out _vignette);
             urpVolume.profile.TryGet(out _chroma);
         }
-        if (breathSlider != null) breathSlider.gameObject.SetActive(false);
+        SetBreathUIActive(false);
     }
 
     void ScheduleNextPanic()
@@ -52,8 +53,11 @@ public class PanicAttack3D : MonoBehaviour
         }
 
         _panicTimer -= Time.deltaTime;
-        if (_panicTimer <= 0f)
+        if (_panicTimer <= 0f && !_inPanic && !_isBlackingOut)
+        {
+            _panicTimer = panicIntervalMax; // prevent repeated fires before _inPanic is set
             StartCoroutine(TriggerPanic());
+        }
     }
 
     public void TriggerPanicNow() => StartCoroutine(TriggerPanic());
@@ -66,7 +70,8 @@ public class PanicAttack3D : MonoBehaviour
         _panicDuration = 0f;
 
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.StartHeartbeat();
-        if (breathSlider != null) { breathSlider.value = 0f; breathSlider.gameObject.SetActive(true); }
+        if (breathSlider != null) breathSlider.value = 0f; // reset BEFORE activating
+        SetBreathUIActive(true);
 
         if (DialogueManager.Instance != null)
             DialogueManager.Instance.SpeakMurad("Look at me! Don't panic. Hold Space and breathe with me... in... and out...", _panicClip);
@@ -118,7 +123,7 @@ public class PanicAttack3D : MonoBehaviour
         _inPanic = false;
 
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.StopHeartbeat();
-        if (breathSlider != null) breathSlider.gameObject.SetActive(false);
+        SetBreathUIActive(false);
 
         DialogueManager.Instance?.SetSubtitle("<color=#FF4444>[BLACKOUT]: You hyperventilated! Water surged +3%.</color>");
         WaterController3D.Instance?.AddWaterSurge(0.03f);
@@ -143,7 +148,8 @@ public class PanicAttack3D : MonoBehaviour
         _panicDuration = 0f;
 
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.StopHeartbeat();
-        if (breathSlider != null) breathSlider.gameObject.SetActive(false);
+        if (breathSlider != null) breathSlider.value = 0f;
+        SetBreathUIActive(false);
 
         SetVignette(0f);
         SetChroma(0f);
@@ -161,7 +167,8 @@ public class PanicAttack3D : MonoBehaviour
         _inPanic = false;
         _isBlackingOut = false;
         ProceduralAudio.Instance?.StopHeartbeat();
-        if (breathSlider != null) breathSlider.gameObject.SetActive(false);
+        if (breathSlider != null) breathSlider.value = 0f;
+        SetBreathUIActive(false);
         SetVignette(0f);
         SetChroma(0f);
         if (cameraTransform != null)
@@ -169,6 +176,14 @@ public class PanicAttack3D : MonoBehaviour
                 cameraTransform.localEulerAngles.x,
                 cameraTransform.localEulerAngles.y, 0f);
         enabled = false;
+    }
+
+    void SetBreathUIActive(bool active)
+    {
+        // Use breathPanel if assigned (the full parent container with BREATHE text + slider).
+        // Falls back to the slider's own GameObject so the script works without it assigned.
+        var target = breathPanel != null ? breathPanel : breathSlider?.gameObject;
+        if (target != null) target.SetActive(active);
     }
 
     void SetVignette(float intensity)

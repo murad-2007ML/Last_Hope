@@ -433,7 +433,7 @@ public static class TheLastHopeAutoBuilder
             new Vector2(1, 1), new Vector2(1, 1), new Vector2(-220, -20), new Vector2(200, 24),
             new Color(0.3f, 0.9f, 0.5f));
         refs.breathSlider.gameObject.SetActive(false);
-        CreateLabel(canvasGO, "BreathLabel", new Vector2(1, 1), new Vector2(-120, -44), "BREATHE [SPACE]", 14);
+        CreateLabel(canvasGO, "BreathLabel", new Vector2(1, 1), new Vector2(-120, -44), "", 14);
 
         // ── Water Level HUD (bottom-left vertical bar) ───────────────────────
         var waterHudRoot = CreateDarkPanel(canvasGO, "WaterHUD",

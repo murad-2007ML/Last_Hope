@@ -59,6 +59,7 @@ public class DoorVoidEnding : MonoBehaviour
 
     bool _cinematic, _cinematicDone, _postFxAdded;
     float _creakTimer;
+    AudioClip _clipVoidLine;
 
     // True while the camera-controlled cinematic is running (checked by WaterController3D etc.).
     public static bool IsCinematicActive => _inst != null && _inst._cinematic && !_inst._cinematicDone;
@@ -205,6 +206,11 @@ public class DoorVoidEnding : MonoBehaviour
         }
     }
 #endif
+
+    void Start()
+    {
+        _clipVoidLine = Resources.Load<AudioClip>("Audio/Murad/murad_04_end");
+    }
 
     // ------------------------------------------------------------------ build
     void Build(Transform exitDoor)
@@ -589,6 +595,19 @@ public class DoorVoidEnding : MonoBehaviour
         AddPostFx();
         yield return new WaitForSeconds(1.6f);
         ProceduralAudio.Instance?.PlayRadioBlip();
+
+        // Murad's haunting line from the void
+        if (_clipVoidLine != null)
+        {
+            DialogueManager.Instance?.SetHUDVisible(true);
+            bool lineDone = false;
+            DialogueManager.Instance?.SpeakMurad(
+                "You think you left Murad behind? Look at all these doors... Everyone has their own trial, and yours has only just begun.",
+                _clipVoidLine, () => lineDone = true);
+            float lineTimeout = Time.time + 12f;
+            while (!lineDone && Time.time < lineTimeout) yield return null;
+        }
+
         if (showRescuerLine) DialogueManager.Instance?.SpeakRescuer(rescuerLine);
 
         // signal slowly dies

@@ -6,40 +6,35 @@ public class RadioSystem : MonoBehaviour
 {
     [SerializeField] float minFreq  = 88.0f;
     [SerializeField] float maxFreq  = 108.0f;
-#pragma warning disable CS0414
-    [SerializeField] float scrollStep = 0.1f;
-#pragma warning restore CS0414
     [SerializeField] Text      frequencyDisplay;
     [SerializeField] Transform radioDial;
     [SerializeField] AudioSource staticSource;
     [SerializeField] GameObject  radioPanel;
 
     [Header("Manual UI Buttons (Optional)")]
-    [SerializeField] Button minusButton;
-    [SerializeField] Button plusButton;
     [SerializeField] Button closeButton;
 
     const float FREQ_BROKEN  = 104.5f;
     const float FREQ_BACKUP  = 98.4f;
     const float TUNE_THRESH  = 0.25f;
     const float LOCK_TIME_REQUIRED = 4.0f;
+    const float TUNE_ANIM_DURATION = 1.5f;
 
     float _freq = 92.0f;
     bool  _panelOpen;
-    bool  _brokenPlayed;   // 104.5 bonus hint (not required)
-    bool  _backupPlayed;   // 98.4 — advances to stage 2
+    bool  _brokenPlayed;
+    bool  _backupPlayed;
     float _lockTimer;
     bool  _lockChimePlayed;
+    bool  _isTuning;
 
-    // Rescuer voice acting audio clips (ElevenLabs)
     AudioClip _clipBroken, _clipBackup, _clipValveGuide, _clipCodeGuide;
 
-    // Dynamic UI References
-    Slider _freqSlider;
-    Slider _lockSlider;
-    Text   _lockStatusText;
-    Text   _instructionsText;
-    bool   _updatingSliderInternal;
+    InputField _freqInput;
+    Button     _btnTune;
+    Button     _btnClose;
+    Slider     _lockSlider;
+    Text       _lockStatusText;
 
     public bool PanelOpen => _panelOpen;
     public float CurrentFrequency => _freq;
@@ -57,10 +52,6 @@ public class RadioSystem : MonoBehaviour
             return _whiteSprite;
         }
     }
-
-    Button _btnClose;
-    Button _btnMinus;
-    Button _btnPlus;
 
     void Start()
     {
@@ -87,23 +78,30 @@ public class RadioSystem : MonoBehaviour
 
         _panelOpen = true;
         if (radioPanel != null) radioPanel.SetActive(true);
+        EnsureRadioBackdrop();
         WireManualButtons();
-        // Pause FirstPersonController movement and look, unlock cursor
+
         if (FirstPersonController.Instance != null)
             FirstPersonController.Instance.MouseLocked = false;
-
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        if (_freqSlider != null)
-        {
-            _updatingSliderInternal = true;
-            _freqSlider.value = _freq;
-            _updatingSliderInternal = false;
-        }
-
         UpdateDisplay();
         UpdateDial();
+
+        // Delay one frame — EventSystem needs the panel to be active before ActivateInputField works
+        StartCoroutine(FocusInputNextFrame());
+    }
+
+    IEnumerator FocusInputNextFrame()
+    {
+        yield return null;
+        if (_freqInput != null)
+        {
+            _freqInput.text = "";
+            _freqInput.Select();
+            _freqInput.ActivateInputField();
+        }
     }
 
     public void ClosePanel()
@@ -111,10 +109,8 @@ public class RadioSystem : MonoBehaviour
         _panelOpen = false;
         if (radioPanel != null) radioPanel.SetActive(false);
 
-        // Resume FirstPersonController movement and look, lock cursor
         if (FirstPersonController.Instance != null)
             FirstPersonController.Instance.MouseLocked = true;
-
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -123,86 +119,112 @@ public class RadioSystem : MonoBehaviour
     {
         if (!_panelOpen) return;
 
-        HandleInputTuning();
-        HandleLockOnMechanic();
+        if (!_isTuning)
+        {
+            HandleLockOnMechanic();
+            UpdateStatic();
+            CheckFreq();
 
-        if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.C))
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+                SubmitFrequencyInput();
+        }
+
+        bool inputFocused = _freqInput != null && _freqInput.isFocused;
+
+        if (Input.GetKeyDown(KeyCode.Escape))
             ClosePanel();
 
-        // Direct screen-point click fallback so UI buttons work 100% reliably
-        if (Input.GetMouseButtonDown(0))
+        if (!inputFocused && !Input.GetKeyDown(KeyCode.Escape))
         {
-            Vector2 mPos = Input.mousePosition;
-            if (_btnClose != null && _btnClose.gameObject.activeInHierarchy &&
-                RectTransformUtility.RectangleContainsScreenPoint(_btnClose.GetComponent<RectTransform>(), mPos, null))
+            if (!_isTuning && _freqInput != null)
             {
-                ClosePanel();
+                _freqInput.Select();
+                _freqInput.ActivateInputField();
             }
-            else if (_btnMinus != null && _btnMinus.gameObject.activeInHierarchy &&
-                RectTransformUtility.RectangleContainsScreenPoint(_btnMinus.GetComponent<RectTransform>(), mPos, null))
-            {
-                float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
-                _freq = Mathf.Clamp(_freq - step, minFreq, maxFreq);
-                OnFrequencyChangedByUser();
-            }
-            else if (_btnPlus != null && _btnPlus.gameObject.activeInHierarchy &&
-                RectTransformUtility.RectangleContainsScreenPoint(_btnPlus.GetComponent<RectTransform>(), mPos, null))
-            {
-                float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
-                _freq = Mathf.Clamp(_freq + step, minFreq, maxFreq);
-                OnFrequencyChangedByUser();
-            }
-        }
-
-        UpdateStatic();
-        CheckFreq();
-    }
-
-    void HandleInputTuning()
-    {
-        float prevFreq = _freq;
-        bool isFineTune = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-
-        // 1. Mouse Scroll Wheel
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if (Mathf.Abs(scroll) > 0.0001f)
-        {
-            float step = isFineTune ? 0.05f : 0.1f;
-            _freq += Mathf.Sign(scroll) * step;
-        }
-
-        // 2. Keyboard A / D or LeftArrow / RightArrow (2.5 FM/sec continuous, 0.8 FM/sec fine)
-        float keyRate = isFineTune ? 0.8f : 2.5f;
-        float keyInput = 0f;
-        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))  keyInput -= 1f;
-        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) keyInput += 1f;
-
-        if (keyInput != 0f)
-        {
-            _freq += keyInput * keyRate * Time.deltaTime;
-        }
-
-        _freq = Mathf.Clamp(_freq, minFreq, maxFreq);
-
-        if (Mathf.Abs(_freq - prevFreq) > 0.001f)
-        {
-            OnFrequencyChangedByUser();
         }
     }
 
-    void OnFrequencyChangedByUser()
+    // ── Input-based tuning ────────────────────────────────────────────────────
+
+    void SubmitFrequencyInput()
     {
+        if (_isTuning) return;
+        if (_freqInput == null) return;
+
+        string raw = _freqInput.text.Trim();
+        if (!float.TryParse(raw,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out float target))
+        {
+            if (_lockStatusText != null)
+                _lockStatusText.text = "<color=#FF4444>Invalid — enter a number like 98.4</color>";
+            return;
+        }
+
+        target = Mathf.Round(Mathf.Clamp(target, minFreq, maxFreq) * 10f) / 10f;
+        StartCoroutine(AnimateTuneTo(target));
+    }
+
+    IEnumerator AnimateTuneTo(float target)
+    {
+        _isTuning = true;
+        if (_btnTune   != null) _btnTune.interactable   = false;
+        if (_freqInput != null) _freqInput.interactable = false;
+        if (_lockStatusText != null) _lockStatusText.text = "";
+
+        float startFreq = _freq;
+        float elapsed   = 0f;
+        bool  midClick  = false;
+
+        // Ramp up static during sweep
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.SetStaticAmount(0.9f);
+
+        while (elapsed < TUNE_ANIM_DURATION)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / TUNE_ANIM_DURATION));
+            _freq = Mathf.Lerp(startFreq, target, t);
+            UpdateDial();
+            UpdateDisplay();
+
+            // Single click near midpoint for tactile feel
+            if (!midClick && elapsed >= TUNE_ANIM_DURATION * 0.45f)
+            {
+                midClick = true;
+                if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayDialClick();
+            }
+
+            yield return null;
+        }
+
+        _freq = target;
         UpdateDial();
         UpdateDisplay();
-        SyncSliderFromFreq();
 
         if (ProceduralAudio.Instance != null)
+        {
+            ProceduralAudio.Instance.SetStaticAmount(0f);
             ProceduralAudio.Instance.PlayDialClick();
+        }
+
+        _isTuning = false;
+        if (_btnTune   != null) _btnTune.interactable   = true;
+        if (_freqInput != null) _freqInput.interactable = true;
+
+        // Evaluate the landed frequency immediately
+        UpdateStatic();
+        CheckFreq();
+
+        // Re-focus so player can type the next frequency right away
+        StartCoroutine(FocusInputNextFrame());
     }
+
+    // ── Lock-on mechanic (Stage 1 only) ──────────────────────────────────────
 
     void HandleLockOnMechanic()
     {
-        // Only active during Stage 1 backup signal search
         if (_backupPlayed)
         {
             if (_lockStatusText != null)
@@ -212,7 +234,7 @@ public class RadioSystem : MonoBehaviour
             return;
         }
 
-        if (PuzzleManager3D.Instance == null || 
+        if (PuzzleManager3D.Instance == null ||
             PuzzleManager3D.Instance.CurrentStage != PuzzleStage.Stage1_TuneBackupFrequency)
         {
             if (_lockStatusText != null) _lockStatusText.text = "";
@@ -223,7 +245,6 @@ public class RadioSystem : MonoBehaviour
         float diff = Mathf.Abs(_freq - FREQ_BACKUP);
         if (diff <= TUNE_THRESH)
         {
-            // Inside lock-on zone!
             if (_lockTimer == 0f && !_lockChimePlayed)
             {
                 _lockChimePlayed = true;
@@ -231,29 +252,26 @@ public class RadioSystem : MonoBehaviour
                     ProceduralAudio.Instance.PlaySignalLockChime();
             }
 
-            // Active atmospheric interference drift trying to pull away
+            // Atmospheric drift — re-enter 98.4 if it escapes the threshold
             float drift = Mathf.Sin(Time.time * 3.5f) * 0.32f * Time.deltaTime;
             _freq = Mathf.Clamp(_freq + drift, minFreq, maxFreq);
             UpdateDial();
             UpdateDisplay();
-            SyncSliderFromFreq();
 
             _lockTimer += Time.deltaTime;
             float pct = Mathf.Clamp01(_lockTimer / LOCK_TIME_REQUIRED);
 
             if (_lockStatusText != null)
-                _lockStatusText.text = $"<color=#FFE066>SIGNAL LOCKING...</color>  {Mathf.RoundToInt(pct * 100f)}%  (COUNTER DRIFT!)";
+                _lockStatusText.text = $"<color=#FFE066>SIGNAL LOCKING...</color>  {Mathf.RoundToInt(pct * 100f)}%  (DRIFT! Re-enter 98.4 if lost)";
             if (_lockSlider != null)
                 _lockSlider.value = pct;
 
             if (_lockTimer >= LOCK_TIME_REQUIRED)
             {
-                // Full Lock Achieved!
                 _backupPlayed = true;
                 _freq = FREQ_BACKUP;
                 UpdateDial();
                 UpdateDisplay();
-                SyncSliderFromFreq();
 
                 if (_lockStatusText != null)
                     _lockStatusText.text = "<color=#4CFF88>SIGNAL LOCKED: 98.4 FM — BACKUP FREQUENCY ACQUIRED</color>";
@@ -263,21 +281,18 @@ public class RadioSystem : MonoBehaviour
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlaySignalLockedConfirmation();
 
-                // Immediately unlock Stage 2 so Fuse Box is ready without delay
                 PuzzleManager3D.Instance?.OnRadioStage2Ready();
-
                 StartCoroutine(PlayBackup());
             }
         }
         else
         {
-            // Decays if player drifts out of range
             if (_lockTimer > 0f)
             {
                 _lockTimer = Mathf.Max(0f, _lockTimer - Time.deltaTime * 0.8f);
                 float pct = Mathf.Clamp01(_lockTimer / LOCK_TIME_REQUIRED);
                 if (_lockStatusText != null)
-                    _lockStatusText.text = "<color=#FF8866>SIGNAL DRIFTED OUT! Realign to 98.4 FM</color>";
+                    _lockStatusText.text = "<color=#FF8866>SIGNAL DRIFTED OUT! Re-enter 98.4 FM</color>";
                 if (_lockSlider != null)
                     _lockSlider.value = pct;
             }
@@ -292,21 +307,10 @@ public class RadioSystem : MonoBehaviour
         }
     }
 
-    void SyncSliderFromFreq()
-    {
-        if (_freqSlider != null && !_updatingSliderInternal)
-        {
-            _updatingSliderInternal = true;
-            _freqSlider.value = _freq;
-            _updatingSliderInternal = false;
-        }
-    }
-
     void CheckFreq()
     {
-        // 104.5 — bonus broken-signal hint (plays once during stage 1+)
-        if (!_brokenPlayed 
-            && PuzzleManager3D.Instance != null 
+        if (!_brokenPlayed
+            && PuzzleManager3D.Instance != null
             && PuzzleManager3D.Instance.CurrentStage >= PuzzleStage.Stage1_TuneBackupFrequency
             && Mathf.Abs(_freq - FREQ_BROKEN) < TUNE_THRESH)
         {
@@ -321,7 +325,7 @@ public class RadioSystem : MonoBehaviour
     // Called by PuzzleManager after valve done
     public void OnValveComplete()  => StartCoroutine(PlayCodeGuide());
 
-    // ── Dialogue routines (preserving ElevenLabs character audio) ────────────
+    // ── Dialogue routines ─────────────────────────────────────────────────────
 
     IEnumerator PlayBroken()
     {
@@ -384,33 +388,8 @@ public class RadioSystem : MonoBehaviour
             frequencyDisplay.text = _freq.ToString("F1") + " FM";
     }
 
-    void StepDown()
-    {
-        float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
-        _freq = Mathf.Clamp(_freq - step, minFreq, maxFreq);
-        OnFrequencyChangedByUser();
-    }
-
-    void StepUp()
-    {
-        float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
-        _freq = Mathf.Clamp(_freq + step, minFreq, maxFreq);
-        OnFrequencyChangedByUser();
-    }
     void WireManualButtons()
     {
-        if (minusButton != null)
-        {
-            _btnMinus = minusButton;
-            _btnMinus.onClick.RemoveAllListeners();
-            _btnMinus.onClick.AddListener(StepDown);
-        }
-        if (plusButton != null)
-        {
-            _btnPlus = plusButton;
-            _btnPlus.onClick.RemoveAllListeners();
-            _btnPlus.onClick.AddListener(StepUp);
-        }
         if (closeButton != null)
         {
             _btnClose = closeButton;
@@ -419,7 +398,43 @@ public class RadioSystem : MonoBehaviour
         }
     }
 
-    // ── Dynamic UI Builder ───────────────────────────────────────────────────
+    // ── Dynamic UI Builder ────────────────────────────────────────────────────
+
+    void EnsureRadioBackdrop()
+    {
+        if (radioPanel == null) return;
+        var existing = radioPanel.transform.Find("ClickBackdrop");
+        if (existing != null)
+        {
+            var existBtn = existing.GetComponent<Button>();
+            if (existBtn != null) { existBtn.onClick.RemoveAllListeners(); existBtn.onClick.AddListener(ClosePanel); }
+            existing.SetAsFirstSibling();
+            return;
+        }
+
+        var go = new GameObject("ClickBackdrop", typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(radioPanel.transform, false);
+        go.transform.SetAsFirstSibling();
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0f, 0f, 0f, 0f);
+        img.raycastTarget = true;
+
+        var btn = go.GetComponent<Button>();
+        var cols = btn.colors;
+        cols.normalColor      = new Color(0, 0, 0, 0);
+        cols.highlightedColor = new Color(0, 0, 0, 0);
+        cols.pressedColor     = new Color(0, 0, 0, 0);
+        cols.selectedColor    = new Color(0, 0, 0, 0);
+        btn.colors = cols;
+        btn.onClick.AddListener(ClosePanel);
+    }
 
     void BuildRadioUIIfNeeded()
     {
@@ -429,14 +444,24 @@ public class RadioSystem : MonoBehaviour
         if (font == null)
             font = Resources.GetBuiltinResource<Font>("Arial.ttf") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
+        EnsureRadioBackdrop();
+
         Transform existingControls = radioPanel.transform.Find("DynamicRadioControls");
         if (existingControls != null)
         {
-            // Already built, link fields
-            _freqSlider = existingControls.Find("FreqSlider")?.GetComponent<Slider>();
-            _lockSlider = existingControls.Find("LockBar")?.GetComponent<Slider>();
-            _lockStatusText = existingControls.Find("LockStatusText")?.GetComponent<Text>();
-            return;
+            // If the old slider-based UI is present (no FreqInput), destroy and rebuild
+            if (existingControls.Find("FreqInput") == null)
+            {
+                Destroy(existingControls.gameObject);
+            }
+            else
+            {
+                _freqInput      = existingControls.Find("FreqInput").GetComponent<InputField>();
+                _btnTune        = existingControls.Find("BtnTune")?.GetComponent<Button>();
+                _lockSlider     = existingControls.Find("LockBar")?.GetComponent<Slider>();
+                _lockStatusText = existingControls.Find("LockStatusText")?.GetComponent<Text>();
+                return;
+            }
         }
 
         var root = new GameObject("DynamicRadioControls", typeof(RectTransform));
@@ -447,111 +472,91 @@ public class RadioSystem : MonoBehaviour
         rootRT.offsetMin = Vector2.zero;
         rootRT.offsetMax = Vector2.zero;
 
-        // 1. Interactive Frequency Slider
-        var sliderGO = new GameObject("FreqSlider", typeof(RectTransform), typeof(Slider));
-        sliderGO.transform.SetParent(root.transform, false);
-        var sRT = sliderGO.GetComponent<RectTransform>();
-        sRT.anchorMin = new Vector2(0.5f, 0.35f);
-        sRT.anchorMax = new Vector2(0.5f, 0.35f);
-        sRT.sizeDelta = new Vector2(400f, 24f);
+        // 1. Prompt label
+        var labelGO = new GameObject("FreqLabel", typeof(RectTransform), typeof(Text));
+        labelGO.transform.SetParent(root.transform, false);
+        var labelRT = labelGO.GetComponent<RectTransform>();
+        labelRT.anchorMin = new Vector2(0.5f, 0.5f);
+        labelRT.anchorMax = new Vector2(0.5f, 0.5f);
+        labelRT.anchoredPosition = new Vector2(0f, 140f);
+        labelRT.sizeDelta = new Vector2(600f, 40f);
+        var labelTxt = labelGO.GetComponent<Text>();
+        labelTxt.font = font;
+        labelTxt.fontSize = 24;
+        labelTxt.alignment = TextAnchor.MiddleCenter;
+        labelTxt.color = new Color(0.75f, 0.75f, 0.8f, 0.9f);
+        labelTxt.text = "ENTER FREQUENCY  (88.0 - 108.0 FM)";
 
-        // Slider Background
-        var bgGO = new GameObject("Background", typeof(RectTransform), typeof(Image));
-        bgGO.transform.SetParent(sliderGO.transform, false);
-        var bgRT = bgGO.GetComponent<RectTransform>();
-        bgRT.anchorMin = Vector2.zero; bgRT.anchorMax = Vector2.one;
-        bgRT.offsetMin = Vector2.zero; bgRT.offsetMax = Vector2.zero;
-        bgGO.GetComponent<Image>().color = new Color(0.12f, 0.12f, 0.16f, 0.85f);
-        bgGO.GetComponent<Image>().sprite = WhiteSprite;
+        // 2. InputField
+        var inputGO = new GameObject("FreqInput", typeof(RectTransform), typeof(Image), typeof(InputField));
+        inputGO.transform.SetParent(root.transform, false);
+        var inputRT = inputGO.GetComponent<RectTransform>();
+        inputRT.anchorMin = new Vector2(0.5f, 0.5f);
+        inputRT.anchorMax = new Vector2(0.5f, 0.5f);
+        inputRT.anchoredPosition = new Vector2(-85f, 70f);
+        inputRT.sizeDelta = new Vector2(270f, 64f);
+        var inputImg = inputGO.GetComponent<Image>();
+        inputImg.color = new Color(0.08f, 0.08f, 0.12f, 0.95f);
+        inputImg.sprite = WhiteSprite;
 
-        // Fill Area
-        var fillArea = new GameObject("Fill Area", typeof(RectTransform));
-        fillArea.transform.SetParent(sliderGO.transform, false);
-        var faRT = fillArea.GetComponent<RectTransform>();
-        faRT.anchorMin = Vector2.zero; faRT.anchorMax = Vector2.one;
-        faRT.offsetMin = new Vector2(5f, 0f); faRT.offsetMax = new Vector2(-5f, 0f);
+        var phGO = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
+        phGO.transform.SetParent(inputGO.transform, false);
+        var phRT = phGO.GetComponent<RectTransform>();
+        phRT.anchorMin = Vector2.zero; phRT.anchorMax = Vector2.one;
+        phRT.offsetMin = new Vector2(12f, 2f); phRT.offsetMax = new Vector2(-12f, -2f);
+        var phTxt = phGO.GetComponent<Text>();
+        phTxt.font = font;
+        phTxt.fontSize = 24;
+        phTxt.fontStyle = FontStyle.Italic;
+        phTxt.color = new Color(0.4f, 0.4f, 0.4f, 0.7f);
+        phTxt.text = "e.g. 95.8";
+        phTxt.alignment = TextAnchor.MiddleCenter;
 
-        var fillGO = new GameObject("Fill", typeof(RectTransform), typeof(Image));
-        fillGO.transform.SetParent(fillArea.transform, false);
-        var fillRT = fillGO.GetComponent<RectTransform>();
-        fillRT.anchorMin = Vector2.zero; fillRT.anchorMax = Vector2.one;
-        fillRT.offsetMin = Vector2.zero; fillRT.offsetMax = Vector2.zero;
-        var fillImg = fillGO.GetComponent<Image>();
-        fillImg.color = new Color(0.9f, 0.7f, 0.2f, 0.8f);
-        fillImg.sprite = WhiteSprite;
+        var itGO = new GameObject("Text", typeof(RectTransform), typeof(Text));
+        itGO.transform.SetParent(inputGO.transform, false);
+        var itRT = itGO.GetComponent<RectTransform>();
+        itRT.anchorMin = Vector2.zero; itRT.anchorMax = Vector2.one;
+        itRT.offsetMin = new Vector2(12f, 2f); itRT.offsetMax = new Vector2(-12f, -2f);
+        var itTxt = itGO.GetComponent<Text>();
+        itTxt.font = font;
+        itTxt.fontSize = 28;
+        itTxt.color = new Color(1f, 0.9f, 0.4f, 1f);
+        itTxt.alignment = TextAnchor.MiddleCenter;
+        itTxt.supportRichText = false;
 
-        // Handle Area
-        var handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
-        handleArea.transform.SetParent(sliderGO.transform, false);
-        var haRT = handleArea.GetComponent<RectTransform>();
-        haRT.anchorMin = Vector2.zero; haRT.anchorMax = Vector2.one;
-        haRT.offsetMin = new Vector2(10f, 0f); haRT.offsetMax = new Vector2(-10f, 0f);
+        _freqInput = inputGO.GetComponent<InputField>();
+        _freqInput.textComponent = itTxt;
+        _freqInput.placeholder = phTxt;
+        _freqInput.contentType = InputField.ContentType.DecimalNumber;
+        _freqInput.characterLimit = 5;
+        _freqInput.onSubmit.AddListener(_ => SubmitFrequencyInput());
 
-        var handleGO = new GameObject("Handle", typeof(RectTransform), typeof(Image));
-        handleGO.transform.SetParent(handleArea.transform, false);
-        var hRT = handleGO.GetComponent<RectTransform>();
-        hRT.sizeDelta = new Vector2(20f, 32f);
-        var hImg = handleGO.GetComponent<Image>();
-        hImg.color = new Color(1f, 0.85f, 0.4f, 1f);
-        hImg.sprite = WhiteSprite;
-
-        _freqSlider = sliderGO.GetComponent<Slider>();
-        _freqSlider.fillRect = fillRT;
-        _freqSlider.handleRect = hRT;
-        _freqSlider.targetGraphic = hImg;
-        _freqSlider.direction = Slider.Direction.LeftToRight;
-        _freqSlider.minValue = minFreq;
-        _freqSlider.maxValue = maxFreq;
-        _freqSlider.value = _freq;
-
-        _freqSlider.onValueChanged.AddListener(val =>
-        {
-            if (_updatingSliderInternal) return;
-            _freq = Mathf.Round(val * 10f) / 10f;
-            UpdateDial();
-            UpdateDisplay();
-            if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayDialClick();
-        });
-
-        // 2. Step Buttons: [-] and [+]
-        _btnMinus = CreateButton(root.transform, "BtnMinus", "◄ -0.1 FM", new Vector2(-260f, -65f), new Vector2(100f, 32f), font, () =>
-        {
-            float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
-            _freq = Mathf.Clamp(_freq - step, minFreq, maxFreq);
-            OnFrequencyChangedByUser();
-        });
-
-        _btnPlus = CreateButton(root.transform, "BtnPlus", "+0.1 FM ►", new Vector2(260f, -65f), new Vector2(100f, 32f), font, () =>
-        {
-            float step = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) ? 0.5f : 0.1f;
-            _freq = Mathf.Clamp(_freq + step, minFreq, maxFreq);
-            OnFrequencyChangedByUser();
-        });
-
-        // 3. Close Button
-        _btnClose = CreateButton(root.transform, "BtnClose", "CLOSE (ESC)", new Vector2(0f, -180f), new Vector2(200f, 36f), font, ClosePanel);
+        // 3. TUNE button (right of input field)
+        _btnTune = CreateButton(root.transform, "BtnTune", "TUNE", new Vector2(140f, 70f), new Vector2(140f, 64f), font, SubmitFrequencyInput);
 
         // 4. Lock Status Text
         var lockTxtGO = new GameObject("LockStatusText", typeof(RectTransform), typeof(Text));
         lockTxtGO.transform.SetParent(root.transform, false);
         var ltRT = lockTxtGO.GetComponent<RectTransform>();
-        ltRT.anchorMin = new Vector2(0.5f, 0.25f);
-        ltRT.anchorMax = new Vector2(0.5f, 0.25f);
-        ltRT.sizeDelta = new Vector2(600f, 32f);
+        ltRT.anchorMin = new Vector2(0.5f, 0.5f);
+        ltRT.anchorMax = new Vector2(0.5f, 0.5f);
+        ltRT.anchoredPosition = new Vector2(0f, -55f);
+        ltRT.sizeDelta = new Vector2(680f, 40f);
         _lockStatusText = lockTxtGO.GetComponent<Text>();
         _lockStatusText.font = font;
-        _lockStatusText.fontSize = 18;
+        _lockStatusText.fontSize = 20;
         _lockStatusText.alignment = TextAnchor.MiddleCenter;
         _lockStatusText.color = Color.white;
         _lockStatusText.text = "";
 
-        // 5. Lock Progress Slider
+        // 5. Lock Progress Bar
         var lockBarGO = new GameObject("LockBar", typeof(RectTransform), typeof(Slider));
         lockBarGO.transform.SetParent(root.transform, false);
         var lbRT = lockBarGO.GetComponent<RectTransform>();
-        lbRT.anchorMin = new Vector2(0.5f, 0.20f);
-        lbRT.anchorMax = new Vector2(0.5f, 0.20f);
-        lbRT.sizeDelta = new Vector2(300f, 14f);
+        lbRT.anchorMin = new Vector2(0.5f, 0.5f);
+        lbRT.anchorMax = new Vector2(0.5f, 0.5f);
+        lbRT.anchoredPosition = new Vector2(0f, -105f);
+        lbRT.sizeDelta = new Vector2(420f, 18f);
 
         var lbBg = new GameObject("Bg", typeof(RectTransform), typeof(Image));
         lbBg.transform.SetParent(lockBarGO.transform, false);
@@ -583,19 +588,24 @@ public class RadioSystem : MonoBehaviour
         _lockSlider.value = 0f;
         _lockSlider.interactable = false;
 
-        // 6. Tuning Controls Instructions
+        // 6. Close Button
+        _btnClose = CreateButton(root.transform, "BtnClose", "CLOSE (ESC)",
+            new Vector2(0f, -148f), new Vector2(240f, 48f), font, ClosePanel);
+
+        // 7. Instructions hint
         var instrGO = new GameObject("InstructionsText", typeof(RectTransform), typeof(Text));
         instrGO.transform.SetParent(root.transform, false);
         var inRT = instrGO.GetComponent<RectTransform>();
-        inRT.anchorMin = new Vector2(0.5f, 0.12f);
-        inRT.anchorMax = new Vector2(0.5f, 0.12f);
-        inRT.sizeDelta = new Vector2(700f, 28f);
-        _instructionsText = instrGO.GetComponent<Text>();
-        _instructionsText.font = font;
-        _instructionsText.fontSize = 14;
-        _instructionsText.alignment = TextAnchor.MiddleCenter;
-        _instructionsText.color = new Color(0.75f, 0.75f, 0.8f, 0.8f);
-        _instructionsText.text = "A / D or ◄ / ► to Tune  (Hold SHIFT: Fine Tune)  |  Mouse Wheel  |  Drag Slider";
+        inRT.anchorMin = new Vector2(0.5f, 0.5f);
+        inRT.anchorMax = new Vector2(0.5f, 0.5f);
+        inRT.anchoredPosition = new Vector2(0f, -210f);
+        inRT.sizeDelta = new Vector2(600f, 28f);
+        var instrTxt = instrGO.GetComponent<Text>();
+        instrTxt.font = font;
+        instrTxt.fontSize = 16;
+        instrTxt.alignment = TextAnchor.MiddleCenter;
+        instrTxt.color = new Color(0.6f, 0.6f, 0.65f, 0.8f);
+        instrTxt.text = "Type a frequency then press TUNE or ENTER";
     }
 
     Button CreateButton(Transform parent, string name, string label, Vector2 anchoredPos, Vector2 size, Font font, UnityEngine.Events.UnityAction action)
@@ -615,9 +625,9 @@ public class RadioSystem : MonoBehaviour
 
         var btn = btnGO.GetComponent<Button>();
         var colors = btn.colors;
-        colors.normalColor = new Color(0.2f, 0.22f, 0.28f, 0.9f);
+        colors.normalColor      = new Color(0.2f, 0.22f, 0.28f, 0.9f);
         colors.highlightedColor = new Color(0.35f, 0.4f, 0.5f, 1f);
-        colors.pressedColor = new Color(0.15f, 0.18f, 0.22f, 1f);
+        colors.pressedColor     = new Color(0.15f, 0.18f, 0.22f, 1f);
         btn.colors = colors;
         btn.onClick.AddListener(action);
 
@@ -629,11 +639,11 @@ public class RadioSystem : MonoBehaviour
 
         var txt = txtGO.GetComponent<Text>();
         txt.font = font;
-        txt.fontSize = 14;
+        txt.fontSize = 20;
         txt.alignment = TextAnchor.MiddleCenter;
         txt.color = new Color(0.95f, 0.95f, 0.95f, 1f);
         txt.text = label;
-        txt.raycastTarget = false; // Never block click on parent Button
+        txt.raycastTarget = false;
 
         return btn;
     }

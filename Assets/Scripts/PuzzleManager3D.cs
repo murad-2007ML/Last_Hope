@@ -81,7 +81,14 @@ public class PuzzleManager3D : MonoBehaviour
     bool _doorOpenStarted;
 
     Material _matRed, _matGreen;
+    Material _keypadScreenMat;
     EndingSequence3D _ending;
+
+    // Fuse box 3D door
+    Transform _fuseBoxDoor;
+    Quaternion _fuseBoxDoorOpenRot;
+    Quaternion _fuseBoxDoorClosedRot;
+    bool _fuseBoxDoorOpened;
 
     // Character voice audio clips
     AudioClip _muradWake, _rescuerIntro, _rescuerDoorOverride;
@@ -165,6 +172,8 @@ public class PuzzleManager3D : MonoBehaviour
         AutoFindReferences();
         SetupValves();
         SetupSweetSpotIndicator();
+        SetupKeypadScreenMaterial();
+        SetupFuseBoxDoor();
 
         SetObjective("Explore the basement — turn on your flashlight [RIGHT-CLICK]");
     }
@@ -424,6 +433,7 @@ public class PuzzleManager3D : MonoBehaviour
             ProceduralAudio.Instance.PlaySteamRelease();
 
         radioSystem?.OnValveComplete();
+        SetKeypadScreenEmission(true);
         SetObjective("Combine the clues (sun board & clock) — deduce the 4-digit code and enter on keypad");
     }
 
@@ -434,18 +444,110 @@ public class PuzzleManager3D : MonoBehaviour
         var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
 
         _matRed = new Material(shader);
-        _matRed.SetColor("_BaseColor",     new Color(0.8f, 0.05f, 0.05f));
-        _matRed.SetColor("_EmissionColor", new Color(3f, 0.1f, 0.1f));
+        _matRed.SetColor("_BaseColor",     new Color(0.6f, 0.04f, 0.04f));
+        _matRed.SetColor("_EmissionColor", new Color(0.55f, 0.02f, 0.02f));
         _matRed.EnableKeyword("_EMISSION");
 
         _matGreen = new Material(shader);
-        _matGreen.SetColor("_BaseColor",     new Color(0.05f, 0.8f, 0.1f));
-        _matGreen.SetColor("_EmissionColor", new Color(0.1f, 3f, 0.2f));
+        _matGreen.SetColor("_BaseColor",     new Color(0.04f, 0.6f, 0.08f));
+        _matGreen.SetColor("_EmissionColor", new Color(0.02f, 0.55f, 0.05f));
         _matGreen.EnableKeyword("_EMISSION");
 
         SetLockLight(lockLight1, false);
         SetLockLight(lockLight2, false);
         SetLockLight(lockLight3, false);
+    }
+
+    void SetupKeypadScreenMaterial()
+    {
+        // Find the keypad 3D object and grab a unique instance of its material
+        // so we can toggle the emission at runtime without affecting other objects.
+        var allT = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (var t in allT)
+        {
+            if (!t.name.ToLower().Contains("keypad")) continue;
+            var mr = t.GetComponentInChildren<MeshRenderer>(true);
+            if (mr == null) mr = t.GetComponent<MeshRenderer>();
+            if (mr == null) continue;
+
+            // .material creates a unique instance
+            _keypadScreenMat = mr.material;
+            break;
+        }
+        // Start with emission off — keypad screen is dark until Stage 4
+        SetKeypadScreenEmission(false);
+    }
+
+    void SetupFuseBoxDoor()
+    {
+        var go = GameObject.Find("Fuse_Box_Door");
+        if (go == null)
+        {
+            var parent = GameObject.Find("Fuse_Box");
+            if (parent != null)
+            {
+                foreach (Transform t in parent.GetComponentsInChildren<Transform>(true))
+                {
+                    if (t.name.ToLower().Contains("door")) { go = t.gameObject; break; }
+                }
+        }
+        }
+        if (go == null)
+        {
+            // Last resort: search all transforms
+            foreach (var t in FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (t.name == "Fuse_Box_Door") { go = t.gameObject; break; }
+            }
+        }
+
+        if (go == null)
+        {
+            Debug.LogWarning("[FuseBoxDoor] NOT FOUND in scene — door animation skipped.");
+            return;
+        }
+
+        _fuseBoxDoor = go.transform;
+        go.isStatic  = false;   // prevent static batching from locking the transform
+
+        _fuseBoxDoorOpenRot   = _fuseBoxDoor.rotation;
+        _fuseBoxDoorClosedRot = Quaternion.AngleAxis(90f, Vector3.up) * _fuseBoxDoorOpenRot;
+
+        _fuseBoxDoor.rotation = _fuseBoxDoorClosedRot;
+        Debug.Log($"[FuseBoxDoor] Found '{go.name}'. Open={_fuseBoxDoorOpenRot.eulerAngles} Closed={_fuseBoxDoorClosedRot.eulerAngles}");
+    }
+
+    IEnumerator AnimateFuseBoxDoor()
+    {
+        if (_fuseBoxDoor == null) yield break;
+
+        float elapsed = 0f;
+        const float duration = 0.65f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+            _fuseBoxDoor.rotation = Quaternion.Slerp(_fuseBoxDoorClosedRot, _fuseBoxDoorOpenRot, t);
+            yield return null;
+        }
+
+        _fuseBoxDoor.rotation = _fuseBoxDoorOpenRot;
+    }
+
+    void SetKeypadScreenEmission(bool on)
+    {
+        if (_keypadScreenMat == null) return;
+        if (on)
+        {
+            _keypadScreenMat.EnableKeyword("_EMISSION");
+            _keypadScreenMat.SetColor("_EmissionColor", new Color(0.7f, 0.04f, 0.04f));
+        }
+        else
+        {
+            _keypadScreenMat.SetColor("_EmissionColor", Color.black);
+            _keypadScreenMat.DisableKeyword("_EMISSION");
+        }
     }
 
     void SetLockLight(GameObject go, bool green)
@@ -550,6 +652,27 @@ public class PuzzleManager3D : MonoBehaviour
     {
         if (CurrentStage != PuzzleStage.Stage2_CutWires) return;
 
+        if (!_fuseBoxDoorOpened)
+        {
+            _fuseBoxDoorOpened = true;
+            StartCoroutine(OpenFuseBoxSequence());
+        }
+        else
+        {
+            ShowFusePanel();
+        }
+    }
+
+    IEnumerator OpenFuseBoxSequence()
+    {
+        // Animate door open first
+        yield return StartCoroutine(AnimateFuseBoxDoor());
+        // Then show the modal
+        ShowFusePanel();
+    }
+
+    void ShowFusePanel()
+    {
         if (fusePanelUI != null)
         {
             fusePanelUI.SetActive(true);
@@ -715,6 +838,8 @@ public class PuzzleManager3D : MonoBehaviour
         }
         _keypadInput = "";
         RefreshKeypadDisplay();
+        if (keypadDisplay != null)
+            keypadDisplay.color = new Color(0.88f, 0.12f, 0.12f);
         if (FirstPersonController.Instance != null)
         {
             FirstPersonController.Instance.MovementLocked = true;
@@ -726,6 +851,7 @@ public class PuzzleManager3D : MonoBehaviour
     public void CloseKeypad()
     {
         if (keypadPanelUI != null) keypadPanelUI.SetActive(false);
+        if (keypadDisplay != null) keypadDisplay.color = Color.white;
         if (FirstPersonController.Instance != null)
         {
             FirstPersonController.Instance.MovementLocked = false;
@@ -760,6 +886,8 @@ public class PuzzleManager3D : MonoBehaviour
             CurrentStage = PuzzleStage.Stage5_DoorUnlocked;
             SetStatus("ACCESS GRANTED — 15-SECOND HYDRAULIC OVERRIDE INITIATED");
 
+            if (keypadDisplay != null) keypadDisplay.color = new Color(0.1f, 0.9f, 0.2f);
+            SetKeypadScreenEmission(false);
             CloseKeypad();
 
             UnlockLight(lockLight3, 3, isFinalDoor: true);
@@ -911,53 +1039,16 @@ public class PuzzleManager3D : MonoBehaviour
         // ── 1. Fuse Panel ───────────────────────────────────────────────────
         if (fusePanelUI != null && fusePanelUI.activeSelf)
         {
-            // Direct mouse click check
-            if (Input.GetMouseButtonDown(0))
-            {
-                Vector2 mPos = Input.mousePosition;
-                if (_btnCloseFuse != null && _btnCloseFuse.gameObject.activeInHierarchy &&
-                    RectTransformUtility.RectangleContainsScreenPoint(_btnCloseFuse.GetComponent<RectTransform>(), mPos, null))
-                {
-                    CloseFuseBox();
-                    return;
-                }
-                if (_btnYellow != null && _btnYellow.gameObject.activeInHierarchy &&
-                    RectTransformUtility.RectangleContainsScreenPoint(_btnYellow.GetComponent<RectTransform>(), mPos, null))
-                {
-                    CutWire("yellow");
-                    return;
-                }
-                if (_btnBlue != null && _btnBlue.gameObject.activeInHierarchy &&
-                    RectTransformUtility.RectangleContainsScreenPoint(_btnBlue.GetComponent<RectTransform>(), mPos, null))
-                {
-                    CutWire("blue");
-                    return;
-                }
-                if (_btnRed != null && _btnRed.gameObject.activeInHierarchy &&
-                    RectTransformUtility.RectangleContainsScreenPoint(_btnRed.GetComponent<RectTransform>(), mPos, null))
-                {
-                    CutWire("red");
-                    return;
-                }
-            }
-
-            // Keyboard shortcuts
+            // Mouse clicks are handled by the EventSystem via onClick listeners.
+            // Only handle keyboard shortcuts here to avoid double-firing.
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1) || Input.GetKeyDown(KeyCode.Y))
-            {
                 CutWire("yellow");
-            }
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2) || Input.GetKeyDown(KeyCode.B))
-            {
                 CutWire("blue");
-            }
             else if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3) || Input.GetKeyDown(KeyCode.R))
-            {
                 CutWire("red");
-            }
             else if (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.E))
-            {
                 CloseFuseBox();
-            }
             return;
         }
 
@@ -987,9 +1078,6 @@ public class PuzzleManager3D : MonoBehaviour
 
         if (keypadPanelUI != null && keypadPanelUI.activeSelf)
         {
-            // UI Button klikləri WireButtons() -> onClick ilə idarə olunur;
-            // burada təkrar Input.GetMouseButtonDown yoxlaması 2 dəfə yazmağa səbəb olur.
-
             // Keyboard input for digits 0-9
             for (int i = 0; i <= 9; i++)
             {
@@ -1044,9 +1132,46 @@ public class PuzzleManager3D : MonoBehaviour
         }
     }
 
+    void EnsureBackdrop(GameObject panel, UnityEngine.Events.UnityAction onClose)
+    {
+        if (panel == null) return;
+        var existing = FindChild(panel.transform, "ClickBackdrop");
+        if (existing != null)
+        {
+            var existBtn = existing.GetComponent<Button>();
+            if (existBtn != null) { existBtn.onClick.RemoveAllListeners(); existBtn.onClick.AddListener(onClose); }
+            existing.SetAsFirstSibling();
+            return;
+        }
+
+        var go = new GameObject("ClickBackdrop", typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(panel.transform, false);
+        go.transform.SetAsFirstSibling();
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0f, 0f, 0f, 0f);
+        img.raycastTarget = true;
+
+        var btn = go.GetComponent<Button>();
+        var cols = btn.colors;
+        cols.normalColor      = new Color(0, 0, 0, 0);
+        cols.highlightedColor = new Color(0, 0, 0, 0);
+        cols.pressedColor     = new Color(0, 0, 0, 0);
+        cols.selectedColor    = new Color(0, 0, 0, 0);
+        btn.colors = cols;
+        btn.onClick.AddListener(onClose);
+    }
+
     void EnsureFuseCloseButton()
     {
         if (fusePanelUI == null) return;
+        EnsureBackdrop(fusePanelUI, CloseFuseBox);
         var btnT = FindChild(fusePanelUI.transform, "CloseFuse");
         if (btnT == null)
         {
@@ -1073,6 +1198,7 @@ public class PuzzleManager3D : MonoBehaviour
     void EnsureClueCloseButton()
     {
         if (clueInspectPanel == null) return;
+        EnsureBackdrop(clueInspectPanel, CloseClue);
         var btnT = FindChild(clueInspectPanel.transform, "CloseClue");
         if (btnT == null)
         {
@@ -1099,6 +1225,7 @@ public class PuzzleManager3D : MonoBehaviour
     void EnsureKeypadCloseButton()
     {
         if (keypadPanelUI == null) return;
+        EnsureBackdrop(keypadPanelUI, CloseKeypad);
         var btnT = FindChild(keypadPanelUI.transform, "CloseKeypad");
         if (btnT == null)
         {
