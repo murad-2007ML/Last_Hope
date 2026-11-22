@@ -902,7 +902,7 @@ public class PuzzleManager3D : MonoBehaviour
         if (activeValve != null)
         {
             var wheel = FindChild(activeValve.transform, "Valve_Wheel");
-            if (wheel != null) wheel.Rotate(Vector3.forward, 90f * Time.deltaTime);
+            if (wheel != null) wheel.Rotate(Vector3.right, 90f * Time.deltaTime,Space.World);
         }
     }
 
@@ -1050,7 +1050,7 @@ public class PuzzleManager3D : MonoBehaviour
         var btnT = FindChild(fusePanelUI.transform, "CloseFuse");
         if (btnT == null)
         {
-            _btnCloseFuse = CreatePanelButton(fusePanelUI.transform, "CloseFuse", "[ X ] CLOSE (ESC)",
+            _btnCloseFuse = CreatePanelButton(fusePanelUI.transform, "CloseFuse", " CLOSE (ESC)",
                 new Vector2(0.5f, 0.1f), Vector2.zero, new Vector2(180, 44), CloseFuseBox);
         }
         else
@@ -1063,9 +1063,9 @@ public class PuzzleManager3D : MonoBehaviour
                 _btnCloseFuse.onClick.AddListener(CloseFuseBox);
             }
             var txt = btnT.GetComponentInChildren<Text>(true);
-            if (txt != null) { txt.text = "[ X ] CLOSE (ESC)"; txt.raycastTarget = false; }
+            if (txt != null) { txt.text = " CLOSE (ESC)"; txt.raycastTarget = false; }
             var tmp = btnT.GetComponentInChildren<TextMeshProUGUI>(true);
-            if (tmp != null) { tmp.text = "[ X ] CLOSE (ESC)"; tmp.raycastTarget = false; }
+            if (tmp != null) { tmp.text = " CLOSE (ESC)"; tmp.raycastTarget = false; }
             btnT.gameObject.SetActive(true);
         }
     }
@@ -1076,7 +1076,7 @@ public class PuzzleManager3D : MonoBehaviour
         var btnT = FindChild(clueInspectPanel.transform, "CloseClue");
         if (btnT == null)
         {
-            _btnCloseClue = CreatePanelButton(clueInspectPanel.transform, "CloseClue", "[ X ] CLOSE (ESC)",
+            _btnCloseClue = CreatePanelButton(clueInspectPanel.transform, "CloseClue", " CLOSE (ESC)",
                 new Vector2(0.5f, 0.1f), Vector2.zero, new Vector2(180, 44), CloseClue);
         }
         else
@@ -1089,9 +1089,9 @@ public class PuzzleManager3D : MonoBehaviour
                 _btnCloseClue.onClick.AddListener(CloseClue);
             }
             var txt = btnT.GetComponentInChildren<Text>(true);
-            if (txt != null) { txt.text = "[ X ] CLOSE (ESC)"; txt.raycastTarget = false; }
+            if (txt != null) { txt.text = " CLOSE (ESC)"; txt.raycastTarget = false; }
             var tmp = btnT.GetComponentInChildren<TextMeshProUGUI>(true);
-            if (tmp != null) { tmp.text = "[ X ] CLOSE (ESC)"; tmp.raycastTarget = false; }
+            if (tmp != null) { tmp.text = " CLOSE (ESC)"; tmp.raycastTarget = false; }
             btnT.gameObject.SetActive(true);
         }
     }
@@ -1102,7 +1102,7 @@ public class PuzzleManager3D : MonoBehaviour
         var btnT = FindChild(keypadPanelUI.transform, "CloseKeypad");
         if (btnT == null)
         {
-            _btnCloseKeypad = CreatePanelButton(keypadPanelUI.transform, "CloseKeypad", "[ X ] CLOSE (ESC)",
+            _btnCloseKeypad = CreatePanelButton(keypadPanelUI.transform, "CloseKeypad", " CLOSE (ESC)",
                 new Vector2(0.5f, 0.08f), Vector2.zero, new Vector2(200, 40), CloseKeypad);
         }
         else
